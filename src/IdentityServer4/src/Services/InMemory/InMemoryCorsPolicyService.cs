@@ -1,4 +1,4 @@
-﻿// Copyright (c) Brock Allen & Dominick Baier. All rights reserved.
+// Copyright (c) Brock Allen & Dominick Baier. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
@@ -53,11 +53,11 @@ namespace IdentityServer4.Services
 
             if (result)
             {
-                Logger.LogDebug("Client list checked and origin: {0} is allowed", origin);
+                Logger.LogDebug("Client list checked and origin: {Origin} is allowed", origin);
             }
             else
             {
-                Logger.LogDebug("Client list checked and origin: {0} is not allowed", origin);
+                Logger.LogDebug("Client list checked and origin: {Origin} is not allowed", origin);
             }
 
             return Task.FromResult(result);
