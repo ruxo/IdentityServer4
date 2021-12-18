@@ -2,14 +2,99 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Collections.Generic;
-using System.Linq;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using LanguageExt;
+using static LanguageExt.Prelude;
+// ReSharper disable CollectionNeverUpdated.Global
 
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
+
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Models
 {
+#pragma warning disable CS1591
+    /// <summary>
+    /// INTERNAL use only!
+    /// </summary>
+    public sealed class GrantTypeValidatingHashSet : ICollection<string>
+    {
+        private readonly ICollection<string> _inner;
+
+        /// <summary>
+        /// INTERNAL use only!
+        /// </summary>
+        public GrantTypeValidatingHashSet()
+        {
+            _inner = new System.Collections.Generic.HashSet<string>();
+        }
+
+        /// <summary>
+        /// INTERNAL use only!
+        /// </summary>
+        public GrantTypeValidatingHashSet(IEnumerable<string> values)
+        {
+            _inner = new System.Collections.Generic.HashSet<string>(values);
+        }
+
+        private ICollection<string> Clone()
+        {
+            return new System.Collections.Generic.HashSet<string>(this);
+        }
+
+        private ICollection<string> CloneWith(params string[] values)
+        {
+            var clone = Clone();
+            foreach (var item in values) clone.Add(item);
+            return clone;
+        }
+
+        public int Count => _inner.Count;
+
+        public bool IsReadOnly => _inner.IsReadOnly;
+
+        public void Add(string item)
+        {
+            Client.ValidateGrantTypes(CloneWith(item));
+            _inner.Add(item);
+        }
+
+        public void Clear()
+        {
+            _inner.Clear();
+        }
+
+        public bool Contains(string item)
+        {
+            return _inner.Contains(item);
+        }
+
+        public void CopyTo(string[] array, int arrayIndex)
+        {
+            _inner.CopyTo(array, arrayIndex);
+        }
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            return _inner.GetEnumerator();
+        }
+
+        public bool Remove(string item)
+        {
+            return _inner.Remove(item);
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return _inner.GetEnumerator();
+        }
+    }
+#pragma warning restore CS1591
+    
     /// <summary>
     /// Models an OpenID Connect or OAuth2 client
     /// </summary>
@@ -17,7 +102,7 @@ namespace IdentityServer4.Models
     public class Client
     {
         // setting grant types should be atomic
-        private ICollection<string> _allowedGrantTypes = new GrantTypeValidatingHashSet();
+        private GrantTypeValidatingHashSet _allowedGrantTypes = new();
 
         private string DebuggerDisplay => ClientId ?? $"{{{typeof(Client)}}}";
 
@@ -29,7 +114,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Unique ID of the client
         /// </summary>
-        public string ClientId { get; set; }
+        public string? ClientId { get; set; }
 
         /// <summary>
         /// Gets or sets the protocol type.
@@ -42,7 +127,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Client secrets - only relevant for flows that require a secret
         /// </summary>
-        public ICollection<Secret> ClientSecrets { get; set; } = new HashSet<Secret>();
+        public System.Collections.Generic.HashSet<Secret> ClientSecrets { get; set; } = new ();
 
         /// <summary>
         /// If set to false, no client secret is needed to request tokens at the token endpoint (defaults to <c>true</c>)
@@ -52,22 +137,22 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Client display name (used for logging and consent screen)
         /// </summary>
-        public string ClientName { get; set; }
+        public string? ClientName { get; set; }
 
         /// <summary>
         /// Description of the client.
         /// </summary>
-        public string Description { get; set; }
+        public string? Description { get; set; }
 
         /// <summary>
         /// URI to further information about client (used on consent screen)
         /// </summary>
-        public string ClientUri { get; set; }
+        public string? ClientUri { get; set; }
 
         /// <summary>
         /// URI to client logo (used on consent screen)
         /// </summary>
-        public string LogoUri { get; set; }
+        public string? LogoUri { get; set; }
 
         /// <summary>
         /// Specifies whether a consent screen is required (defaults to <c>false</c>)
@@ -82,13 +167,13 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies the allowed grant types (legal combinations of AuthorizationCode, Implicit, Hybrid, ResourceOwner, ClientCredentials).
         /// </summary>
-        public ICollection<string> AllowedGrantTypes
+        public GrantTypeValidatingHashSet AllowedGrantTypes
         {
-            get { return _allowedGrantTypes; }
+            get => _allowedGrantTypes;
             set
             {
                 ValidateGrantTypes(value);
-                _allowedGrantTypes = new GrantTypeValidatingHashSet(value);
+                _allowedGrantTypes = new(value);
             }
         }
 
@@ -119,17 +204,17 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies allowed URIs to return tokens or authorization codes to
         /// </summary>
-        public ICollection<string> RedirectUris { get; set; } = new HashSet<string>();
+        public System.Collections.Generic.HashSet<string> RedirectUris { get; set; } = new();
 
         /// <summary>
         /// Specifies allowed URIs to redirect to after logout
         /// </summary>
-        public ICollection<string> PostLogoutRedirectUris { get; set; } = new HashSet<string>();
+        public System.Collections.Generic.HashSet<string> PostLogoutRedirectUris { get; set; } = new();
 
         /// <summary>
         /// Specifies logout URI at client for HTTP front-channel based logout.
         /// </summary>
-        public string FrontChannelLogoutUri { get; set; }
+        public string? FrontChannelLogoutUri { get; set; }
 
         /// <summary>
         /// Specifies if the user's session id should be sent to the FrontChannelLogoutUri. Defaults to <c>true</c>.
@@ -139,7 +224,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies logout URI at client for HTTP back-channel based logout.
         /// </summary>
-        public string BackChannelLogoutUri { get; set; }
+        public string? BackChannelLogoutUri { get; set; }
 
         /// <summary>
         /// Specifies if the user's session id should be sent to the BackChannelLogoutUri. Defaults to <c>true</c>.
@@ -154,7 +239,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies the api scopes that the client is allowed to request. If empty, the client can't access any scope
         /// </summary>
-        public ICollection<string> AllowedScopes { get; set; } = new HashSet<string>();
+        public System.Collections.Generic.HashSet<string> AllowedScopes { get; set; } = new();
 
         /// <summary>
         /// When requesting both an id token and access token, should the user claims always be added to the id token instead of requiring the client to use the userinfo endpoint.
@@ -170,7 +255,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Signing algorithm for identity token. If empty, will use the server default signing algorithm.
         /// </summary>
-        public ICollection<string> AllowedIdentityTokenSigningAlgorithms { get; set; } = new HashSet<string>();
+        public System.Collections.Generic.HashSet<string> AllowedIdentityTokenSigningAlgorithms { get; set; } = new();
 
         /// <summary>
         /// Lifetime of access token in seconds (defaults to 3600 seconds / 1 hour)
@@ -234,7 +319,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies which external IdPs can be used with this client (if list is empty all IdPs are allowed). Defaults to empty.
         /// </summary>
-        public ICollection<string> IdentityProviderRestrictions { get; set; } = new HashSet<string>();
+        public System.Collections.Generic.HashSet<string> IdentityProviderRestrictions { get; set; } = new();
 
         /// <summary>
         /// Gets or sets a value indicating whether JWT access tokens should include an identifier. Defaults to <c>true</c>.
@@ -250,7 +335,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The claims.
         /// </value>
-        public ICollection<ClientClaim> Claims { get; set; } = new HashSet<ClientClaim>();
+        public System.Collections.Generic.HashSet<ClientClaim> Claims { get; set; } = new();
 
         /// <summary>
         /// Gets or sets a value indicating whether client claims should be always included in the access tokens - or only for client credentials flow.
@@ -272,7 +357,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Gets or sets a salt value used in pair-wise subjectId generation for users of this client.
         /// </summary>
-        public string PairWiseSubjectSalt { get; set; }
+        public string? PairWiseSubjectSalt { get; set; }
 
         /// <summary>
         /// The maximum duration (in seconds) since the last time the user authenticated.
@@ -285,7 +370,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The type of the device flow user code.
         /// </value>
-        public string UserCodeType { get; set; }
+        public string? UserCodeType { get; set; }
 
         /// <summary>
         /// Gets or sets the device code lifetime.
@@ -301,7 +386,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The allowed CORS origins.
         /// </value>
-        public ICollection<string> AllowedCorsOrigins { get; set; } = new HashSet<string>();
+        public System.Collections.Generic.HashSet<string> AllowedCorsOrigins { get; set; } = new();
 
         /// <summary>
         /// Gets or sets the custom properties for the client.
@@ -309,7 +394,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The properties.
         /// </value>
-        public IDictionary<string, string> Properties { get; set; } = new Dictionary<string, string>();
+        public Dictionary<string, string> Properties { get; set; } = new();
 
         /// <summary>
         /// Validates the grant types.
@@ -325,109 +410,33 @@ namespace IdentityServer4.Models
         public static void ValidateGrantTypes(IEnumerable<string> grantTypes)
         {
             if (grantTypes == null)
-            {
                 throw new ArgumentNullException(nameof(grantTypes));
-            }
+
+            var gt = Seq(grantTypes);
 
             // spaces are not allowed in grant types
-            foreach (var type in grantTypes)
-            {
-                if (type.Contains(' '))
-                {
-                    throw new InvalidOperationException("Grant types cannot contain spaces");
-                }
-            }
+            if (gt.Any(s => s.Contains(' ')))
+                throw new InvalidOperationException("Grant types cannot contain spaces");
 
             // single grant type, seems to be fine
-            if (grantTypes.Count() == 1) return;
+            if (gt.Count() == 1) return;
 
             // don't allow duplicate grant types
-            if (grantTypes.Count() != grantTypes.Distinct().Count())
-            {
+            if (gt.Count() != gt.Distinct().Count())
                 throw new InvalidOperationException("Grant types list contains duplicate values");
-            }
 
             // would allow response_type downgrade attack from code to token
-            DisallowGrantTypeCombination(GrantType.Implicit, GrantType.AuthorizationCode, grantTypes);
-            DisallowGrantTypeCombination(GrantType.Implicit, GrantType.Hybrid, grantTypes);
+            DisallowGrantTypeCombination(GrantType.Implicit, GrantType.AuthorizationCode, gt);
+            DisallowGrantTypeCombination(GrantType.Implicit, GrantType.Hybrid, gt);
 
-            DisallowGrantTypeCombination(GrantType.AuthorizationCode, GrantType.Hybrid, grantTypes);
+            DisallowGrantTypeCombination(GrantType.AuthorizationCode, GrantType.Hybrid, gt);
         }
 
-        private static void DisallowGrantTypeCombination(string value1, string value2, IEnumerable<string> grantTypes)
+        private static void DisallowGrantTypeCombination(string value1, string value2, Seq<string> grantTypes)
         {
-            if (grantTypes.Contains(value1, StringComparer.Ordinal) &&
-                grantTypes.Contains(value2, StringComparer.Ordinal))
-            {
+            if (!grantTypes.Any(s => s.Equals(value1, StringComparison.Ordinal) || s.Equals(value2, StringComparison.Ordinal)))
                 throw new InvalidOperationException($"Grant types list cannot contain both {value1} and {value2}");
-            }
         }
 
-        internal class GrantTypeValidatingHashSet : ICollection<string>
-        {
-            private readonly ICollection<string> _inner;
-
-            public GrantTypeValidatingHashSet()
-            {
-                _inner = new HashSet<string>();
-            }
-
-            public GrantTypeValidatingHashSet(IEnumerable<string> values)
-            {
-                _inner = new HashSet<string>(values);
-            }
-
-            private ICollection<string> Clone()
-            {
-                return new HashSet<string>(this);
-            }
-
-            private ICollection<string> CloneWith(params string[] values)
-            {
-                var clone = Clone();
-                foreach (var item in values) clone.Add(item);
-                return clone;
-            }
-
-            public int Count => _inner.Count;
-
-            public bool IsReadOnly => _inner.IsReadOnly;
-
-            public void Add(string item)
-            {
-                ValidateGrantTypes(CloneWith(item));
-                _inner.Add(item);
-            }
-
-            public void Clear()
-            {
-                _inner.Clear();
-            }
-
-            public bool Contains(string item)
-            {
-                return _inner.Contains(item);
-            }
-
-            public void CopyTo(string[] array, int arrayIndex)
-            {
-                _inner.CopyTo(array, arrayIndex);
-            }
-
-            public IEnumerator<string> GetEnumerator()
-            {
-                return _inner.GetEnumerator();
-            }
-
-            public bool Remove(string item)
-            {
-                return _inner.Remove(item);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return _inner.GetEnumerator();
-            }
-        }
     }
 }

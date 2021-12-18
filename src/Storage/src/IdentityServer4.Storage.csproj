@@ -22,6 +22,10 @@
     <PublicSign Condition="'$(OS)' != 'Windows_NT'">true</PublicSign>
 
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <LangVersion>10</LangVersion>
+
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -35,6 +39,7 @@
 
   <ItemGroup>
     <PackageReference Include="IdentityModel" />
+    <PackageReference Include="LanguageExt.Core" Version="4.0.3" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
 
