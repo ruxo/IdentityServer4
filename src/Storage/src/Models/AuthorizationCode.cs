@@ -11,7 +11,7 @@ namespace IdentityServer4.Models
     /// <summary>
     /// Models an authorization code.
     /// </summary>
-    public class AuthorizationCode
+    public class AuthorizationCode : IAuthorizationModel
     {
         /// <summary>
         /// Gets or sets the creation time.
@@ -35,7 +35,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The ID of the client.
         /// </value>
-        public string ClientId { get; set; }
+        public string? ClientId { get; set; }
 
         /// <summary>
         /// Gets or sets the subject.
@@ -61,6 +61,9 @@ namespace IdentityServer4.Models
         /// </value>
         // todo: brock, change to parsed scopes
         public IEnumerable<string> RequestedScopes { get; set; }
+
+        /// <inheritdoc />
+        public IEnumerable<string> Scopes => RequestedScopes;
 
         /// <summary>
         /// Gets or sets the redirect URI.

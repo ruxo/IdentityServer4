@@ -4,6 +4,7 @@
 
 using IdentityServer4.Models;
 using System.Threading.Tasks;
+using LanguageExt;
 
 namespace IdentityServer4.Stores
 {
@@ -17,6 +18,6 @@ namespace IdentityServer4.Stores
         /// </summary>
         /// <param name="clientId">The client id</param>
         /// <returns>The client</returns>
-        Task<Client> FindClientByIdAsync(string clientId);
+        OptionAsync<Client> FindClientByIdAsync(string clientId);
     }
 }

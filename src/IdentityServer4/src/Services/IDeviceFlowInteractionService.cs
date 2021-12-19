@@ -4,6 +4,7 @@
 
 using System.Threading.Tasks;
 using IdentityServer4.Models;
+using LanguageExt;
 
 namespace IdentityServer4.Services
 {
@@ -17,7 +18,7 @@ namespace IdentityServer4.Services
         /// </summary>
         /// <param name="userCode">The user code.</param>
         /// <returns></returns>
-        Task<DeviceFlowAuthorizationRequest> GetAuthorizationContextAsync(string userCode);
+        OptionAsync<DeviceFlowAuthorizationRequest> GetAuthorizationContextAsync(string userCode);
 
         /// <summary>
         /// Handles the request asynchronous.

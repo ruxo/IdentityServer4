@@ -58,7 +58,7 @@ namespace IdentityServer4.Validation
         /// <value>
         /// The authorization code.
         /// </value>
-        public AuthorizationCode AuthorizationCode { get; set; }
+        public AuthorizationCode? AuthorizationCode { get; set; }
 
         /// <summary>
         /// Gets or sets the authorization code handle.
@@ -82,6 +82,6 @@ namespace IdentityServer4.Validation
         /// <value>
         /// The device code.
         /// </value>
-        public DeviceCode DeviceCode { get; set; }
+        public DeviceCode? DeviceCode { get; set; }
     }
 }

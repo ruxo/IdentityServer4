@@ -6,10 +6,12 @@ using System.Threading.Tasks;
 using IdentityModel;
 using IdentityServer4.Configuration;
 using IdentityServer4.Extensions;
+using LanguageExt;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authentication;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Services
 {
     /// <summary>
@@ -178,7 +180,7 @@ namespace IdentityServer4.Services
         /// Gets the current authenticated user.
         /// </summary>
         /// <returns></returns>
-        public virtual async Task<ClaimsPrincipal> GetUserAsync()
+        public virtual async OptionAsync<ClaimsPrincipal> GetUserAsync()
         {
             await AuthenticateAsync();
 

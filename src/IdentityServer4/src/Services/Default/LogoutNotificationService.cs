@@ -10,7 +10,11 @@ using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using LanguageExt;
+using RZ.Foundation.Extensions;
+using static LanguageExt.Prelude;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Services
 {
     /// <summary>
@@ -36,85 +40,80 @@ namespace IdentityServer4.Services
             _logger = logger;
         }
 
+        Option<string> GetRedirectUrl(LogoutNotificationContext context, Client client)
+        {
+            if (!client.FrontChannelLogoutUri.IsPresent())
+                return None;
+            
+            var url = client.FrontChannelLogoutUri!;
+
+            switch (client.ProtocolType) {
+                // add session id if required
+                case IdentityServerConstants.ProtocolTypes.OpenIdConnect:
+                {
+                    if (client.FrontChannelLogoutSessionRequired)
+                    {
+                        url = url.AddQueryString(OidcConstants.EndSessionRequest.Sid, context.SessionId);
+                        url = url.AddQueryString(OidcConstants.EndSessionRequest.Issuer,
+                            _httpContextAccessor.HttpContext!.GetIdentityServerIssuerUri());
+                    }
+                    break;
+                }
+                case IdentityServerConstants.ProtocolTypes.WsFederation:
+                    url = url.AddQueryString(Constants.WsFedSignOut.LogoutUriParameterName,
+                                             Constants.WsFedSignOut.LogoutUriParameterValue);
+                    break;
+            }
+            return url;
+        }
+
         /// <inheritdoc/>
         public async Task<IEnumerable<string>> GetFrontChannelLogoutNotificationsUrlsAsync(LogoutNotificationContext context)
         {
-            var frontChannelUrls = new List<string>();
-            foreach (var clientId in context.ClientIds)
-            {
-                var client = await _clientStore.FindEnabledClientByIdAsync(clientId);
-                if (client != null)
-                {
-                    if (client.FrontChannelLogoutUri.IsPresent())
-                    {
-                        var url = client.FrontChannelLogoutUri;
-
-                        // add session id if required
-                        if (client.ProtocolType == IdentityServerConstants.ProtocolTypes.OpenIdConnect)
-                        {
-                            if (client.FrontChannelLogoutSessionRequired)
-                            {
-                                url = url.AddQueryString(OidcConstants.EndSessionRequest.Sid, context.SessionId);
-                                url = url.AddQueryString(OidcConstants.EndSessionRequest.Issuer, _httpContextAccessor.HttpContext.GetIdentityServerIssuerUri());
-                            }
-                        }
-                        else if (client.ProtocolType == IdentityServerConstants.ProtocolTypes.WsFederation)
-                        {
-                            url = url.AddQueryString(Constants.WsFedSignOut.LogoutUriParameterName, Constants.WsFedSignOut.LogoutUriParameterValue);
-                        }
-
-                        frontChannelUrls.Add(url);
-                    }
-                }
-            }
+            var frontChannelUrls = await context.ClientIds
+                .ChooseAsync(_clientStore.FindEnabledClientByIdAsync)
+                .Choose(c => GetRedirectUrl(context, c))
+                .ToArrayAsync();
 
             if (frontChannelUrls.Any())
             {
                 var msg = frontChannelUrls.Aggregate((x, y) => x + ", " + y);
-                _logger.LogDebug("Client front-channel logout URLs: {0}", msg);
+                _logger.LogDebug("Client front-channel logout URLs: {Message}", msg);
             }
             else
-            {
                 _logger.LogDebug("No client front-channel logout URLs");
-            }
 
             return frontChannelUrls;
         }
 
+        Option<BackChannelLogoutRequest> GetBackChannelLogoutUri(LogoutNotificationContext context, string clientId,
+            Client client) =>
+            client.BackChannelLogoutUri.IsPresent()
+                ? new BackChannelLogoutRequest
+                {
+                    ClientId = clientId,
+                    LogoutUri = client.BackChannelLogoutUri!,
+                    SubjectId = context.SubjectId,
+                    SessionId = context.SessionId,
+                    SessionIdRequired = client.BackChannelLogoutSessionRequired
+                }
+                : None;
+
         /// <inheritdoc/>
         public async Task<IEnumerable<BackChannelLogoutRequest>> GetBackChannelLogoutNotificationsAsync(LogoutNotificationContext context)
         {
-            var backChannelLogouts = new List<BackChannelLogoutRequest>();
-            foreach (var clientId in context.ClientIds)
-            {
-                var client = await _clientStore.FindEnabledClientByIdAsync(clientId);
-                if (client != null)
-                {
-                    if (client.BackChannelLogoutUri.IsPresent())
-                    {
-                        var back = new BackChannelLogoutRequest
-                        {
-                            ClientId = clientId,
-                            LogoutUri = client.BackChannelLogoutUri,
-                            SubjectId = context.SubjectId,
-                            SessionId = context.SessionId,
-                            SessionIdRequired = client.BackChannelLogoutSessionRequired
-                        };
-
-                        backChannelLogouts.Add(back);
-                    }
-                }
-            }
+            var backChannelLogouts = await context.ClientIds
+                .ChooseAsync(_clientStore.FindClientByIdAsync)
+                .Choose(c => GetBackChannelLogoutUri(context, c.ClientId!, c))
+                .ToArrayAsync();
 
             if (backChannelLogouts.Any())
             {
                 var msg = backChannelLogouts.Select(x => x.LogoutUri).Aggregate((x, y) => x + ", " + y);
-                _logger.LogDebug("Client back-channel logout URLs: {0}", msg);
+                _logger.LogDebug("Client back-channel logout URLs: {Message}", msg);
             }
             else
-            {
                 _logger.LogDebug("No client back-channel logout URLs");
-            }
 
             return backChannelLogouts;
         }

@@ -11,7 +11,7 @@ namespace IdentityServer4.Models
     /// <summary>
     /// Represents data needed for device flow.
     /// </summary>
-    public class DeviceCode
+    public class DeviceCode : IAuthorizationModel
     {
         /// <summary>
         /// Gets or sets the creation time.
@@ -35,7 +35,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The client identifier.
         /// </value>
-        public string ClientId { get; set; }
+        public string? ClientId { get; set; }
 
         /// <summary>
         /// Gets the description the user assigned to the device being authorized.
@@ -76,6 +76,9 @@ namespace IdentityServer4.Models
         /// The authorized scopes.
         /// </value>
         public IEnumerable<string> AuthorizedScopes { get; set; }
+
+        /// <inheritdoc />
+        public IEnumerable<string> Scopes => AuthorizedScopes;
 
         /// <summary>
         /// Gets or sets the subject.

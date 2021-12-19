@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using IdentityServer4.Models;
 using IdentityServer4.Stores;
 using IdentityServer4.Validation;
+using LanguageExt;
 using Microsoft.Extensions.Logging;
 
 namespace IdentityServer4.Services
@@ -36,22 +37,23 @@ namespace IdentityServer4.Services
             _logger = logger;
         }
 
-        public async Task<DeviceFlowAuthorizationRequest> GetAuthorizationContextAsync(string userCode)
+        public OptionAsync<DeviceFlowAuthorizationRequest> GetAuthorizationContextAsync(string userCode)
         {
-            var deviceAuth = await _devices.FindByUserCodeAsync(userCode);
-            if (deviceAuth == null) return null;
-
-            var client = await _clients.FindClientByIdAsync(deviceAuth.ClientId);
-            if (client == null) return null;
-
-            var parsedScopesResult = _scopeParser.ParseScopeValues(deviceAuth.RequestedScopes);
-            var validatedResources = await _resourceStore.CreateResourceValidationResult(parsedScopesResult);
-
-            return new DeviceFlowAuthorizationRequest
+            async Task<DeviceFlowAuthorizationRequest> GetRequest(DeviceCode deviceAuth, Client client)
             {
-                Client = client,
-                ValidatedResources = validatedResources
-            };
+                var parsedScopesResult = _scopeParser.ParseScopeValues(deviceAuth.RequestedScopes);
+                var validatedResources = await _resourceStore.CreateResourceValidationResult(parsedScopesResult);
+
+                return new()
+                {
+                    Client = client,
+                    ValidatedResources = validatedResources
+                };
+            }
+
+            return _devices.FindByUserCodeAsync(userCode)
+                           .Bind(da => _clients.FindClientByIdAsync(da.ClientId!)
+                                               .MapAsync(c => GetRequest(da, c)));
         }
 
         public async Task<DeviceFlowInteractionResult> HandleRequestAsync(string userCode, ConsentResponse consent)
@@ -62,7 +64,7 @@ namespace IdentityServer4.Services
             var deviceAuth = await _devices.FindByUserCodeAsync(userCode);
             if (deviceAuth == null) return LogAndReturnError("Invalid user code", "Device authorization failure - user code is invalid");
 
-            var client = await _clients.FindClientByIdAsync(deviceAuth.ClientId);
+            var client = await _clients.FindClientByIdAsync(deviceAuth.ClientId!);
             if (client == null) return LogAndReturnError("Invalid client", "Device authorization failure - requesting client is invalid");
 
             var subject = await _session.GetUserAsync();

@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using IdentityServer4.Models;
+using LanguageExt;
 
 namespace IdentityServer4.Services
 {
@@ -20,13 +21,13 @@ namespace IdentityServer4.Services
         /// </summary>
         /// <param name="userCode">The user code.</param>
         /// <returns></returns>
-        Task<DeviceCode> FindByUserCodeAsync(string userCode);
+        OptionAsync<DeviceCode> FindByUserCodeAsync(string userCode);
 
         /// <summary>
         /// Finds device authorization by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
-        Task<DeviceCode> FindByDeviceCodeAsync(string deviceCode);
+        OptionAsync<DeviceCode> FindByDeviceCodeAsync(string deviceCode);
 
         /// <summary>
         /// Updates device authorization, searching by user code.

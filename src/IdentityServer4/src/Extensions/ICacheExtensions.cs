@@ -6,6 +6,7 @@ using IdentityServer4.Services;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Threading.Tasks;
+using LanguageExt;
 
 namespace IdentityServer4.Extensions
 {
@@ -31,7 +32,7 @@ namespace IdentityServer4.Extensions
         /// <exception cref="ArgumentNullException">cache
         /// or
         /// get</exception>
-        public static async Task<T> GetAsync<T>(this ICache<T> cache, string key, TimeSpan duration, Func<Task<T>> get, ILogger logger)
+        public static async OptionAsync<T> GetAsync<T>(this ICache<T> cache, string key, TimeSpan duration, Func<Task<T>> get, ILogger logger)
             where T : class
         {
             if (cache == null) throw new ArgumentNullException(nameof(cache));

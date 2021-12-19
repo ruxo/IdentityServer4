@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using IdentityServer4.Models;
 using IdentityServer4.Stores;
+using LanguageExt;
 
 namespace IdentityServer4.Services.Default
 {
@@ -45,20 +46,14 @@ namespace IdentityServer4.Services.Default
         /// </summary>
         /// <param name="userCode">The user code.</param>
         /// <returns></returns>
-        public Task<DeviceCode> FindByUserCodeAsync(string userCode)
-        {
-            return _store.FindByUserCodeAsync(userCode.Sha256());
-        }
+        public OptionAsync<DeviceCode> FindByUserCodeAsync(string userCode) => _store.FindByUserCodeAsync(userCode.Sha256());
 
         /// <summary>
         /// Finds device authorization by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
         /// <returns></returns>
-        public Task<DeviceCode> FindByDeviceCodeAsync(string deviceCode)
-        {
-            return _store.FindByDeviceCodeAsync(deviceCode.Sha256());
-        }
+        public OptionAsync<DeviceCode> FindByDeviceCodeAsync(string deviceCode) => _store.FindByDeviceCodeAsync(deviceCode.Sha256());
 
         /// <summary>
         /// Updates device authorization, searching by user code.
@@ -66,19 +61,13 @@ namespace IdentityServer4.Services.Default
         /// <param name="userCode">The user code.</param>
         /// <param name="data">The data.</param>
         /// <returns></returns>
-        public Task UpdateByUserCodeAsync(string userCode, DeviceCode data)
-        {
-            return _store.UpdateByUserCodeAsync(userCode.Sha256(), data);
-        }
+        public Task UpdateByUserCodeAsync(string userCode, DeviceCode data) => _store.UpdateByUserCodeAsync(userCode.Sha256(), data);
 
         /// <summary>
         /// Removes the device authorization, searching by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
         /// <returns></returns>
-        public Task RemoveByDeviceCodeAsync(string deviceCode)
-        {
-            return _store.RemoveByDeviceCodeAsync(deviceCode.Sha256());
-        }
+        public Task RemoveByDeviceCodeAsync(string deviceCode) => _store.RemoveByDeviceCodeAsync(deviceCode.Sha256());
     }
 }

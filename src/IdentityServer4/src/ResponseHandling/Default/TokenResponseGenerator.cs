@@ -12,8 +12,11 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using LanguageExt;
 using Microsoft.AspNetCore.Authentication;
+using static LanguageExt.Prelude;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.ResponseHandling
 {
     /// <summary>
@@ -162,15 +165,7 @@ namespace IdentityServer4.ResponseHandling
             if (request.ValidatedRequest.AuthorizationCode.IsOpenId)
             {
                 // load the client that belongs to the authorization code
-                Client client = null;
-                if (request.ValidatedRequest.AuthorizationCode.ClientId != null)
-                {
-                    client = await Clients.FindEnabledClientByIdAsync(request.ValidatedRequest.AuthorizationCode.ClientId);
-                }
-                if (client == null)
-                {
-                    throw new InvalidOperationException("Client does not exist anymore.");
-                }
+                await GetValidatedClient(request.ValidatedRequest.AuthorizationCode.ClientId!);
 
                 var parsedScopesResult = ScopeParser.ParseScopeValues(request.ValidatedRequest.AuthorizationCode.RequestedScopes);
                 var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
@@ -281,15 +276,7 @@ namespace IdentityServer4.ResponseHandling
             if (request.ValidatedRequest.DeviceCode.IsOpenId)
             {
                 // load the client that belongs to the device code
-                Client client = null;
-                if (request.ValidatedRequest.DeviceCode.ClientId != null)
-                {
-                    client = await Clients.FindEnabledClientByIdAsync(request.ValidatedRequest.DeviceCode.ClientId);
-                }
-                if (client == null)
-                {
-                    throw new InvalidOperationException("Client does not exist anymore.");
-                }
+                await GetValidatedClient(request.ValidatedRequest.DeviceCode.ClientId!);
 
                 var parsedScopesResult = ScopeParser.ParseScopeValues(request.ValidatedRequest.DeviceCode.AuthorizedScopes);
                 var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
@@ -352,67 +339,20 @@ namespace IdentityServer4.ResponseHandling
         /// <param name="request">The request.</param>
         /// <returns></returns>
         /// <exception cref="System.InvalidOperationException">Client does not exist anymore.</exception>
-        protected virtual async Task<(string accessToken, string refreshToken)> CreateAccessTokenAsync(ValidatedTokenRequest request)
+        protected virtual async Task<(string accessToken, string? refreshToken)> CreateAccessTokenAsync(ValidatedTokenRequest request)
         {
             TokenCreationRequest tokenRequest;
             bool createRefreshToken;
 
-            if (request.AuthorizationCode != null)
-            {
-                createRefreshToken = request.AuthorizationCode.RequestedScopes.Contains(IdentityServerConstants.StandardScopes.OfflineAccess);
+            var authModel = (IAuthorizationModel?) request.AuthorizationCode ?? request.DeviceCode;
 
-                // load the client that belongs to the authorization code
-                Client client = null;
-                if (request.AuthorizationCode.ClientId != null)
-                {
-                    client = await Clients.FindEnabledClientByIdAsync(request.AuthorizationCode.ClientId);
-                }
-                if (client == null)
-                {
-                    throw new InvalidOperationException("Client does not exist anymore.");
-                }
-
-                var parsedScopesResult = ScopeParser.ParseScopeValues(request.AuthorizationCode.RequestedScopes);
-                var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
-
-                tokenRequest = new TokenCreationRequest
-                {
-                    Subject = request.AuthorizationCode.Subject,
-                    Description = request.AuthorizationCode.Description,
-                    ValidatedResources = validatedResources,
-                    ValidatedRequest = request
-                };
-            }
-            else if (request.DeviceCode != null)
-            {
-                createRefreshToken = request.DeviceCode.AuthorizedScopes.Contains(IdentityServerConstants.StandardScopes.OfflineAccess);
-
-                Client client = null;
-                if (request.DeviceCode.ClientId != null)
-                {
-                    client = await Clients.FindEnabledClientByIdAsync(request.DeviceCode.ClientId);
-                }
-                if (client == null)
-                {
-                    throw new InvalidOperationException("Client does not exist anymore.");
-                }
-
-                var parsedScopesResult = ScopeParser.ParseScopeValues(request.DeviceCode.AuthorizedScopes);
-                var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
-
-                tokenRequest = new TokenCreationRequest
-                {
-                    Subject = request.DeviceCode.Subject,
-                    Description = request.DeviceCode.Description,
-                    ValidatedResources = validatedResources,
-                    ValidatedRequest = request
-                };
-            }
+            if (authModel != null)
+                (createRefreshToken, tokenRequest) = await CreateToken(request, authModel);
             else
             {
                 createRefreshToken = request.ValidatedResources.Resources.OfflineAccess;
 
-                tokenRequest = new TokenCreationRequest
+                tokenRequest = new()
                 {
                     Subject = request.Subject,
                     ValidatedResources = request.ValidatedResources,
@@ -432,13 +372,32 @@ namespace IdentityServer4.ResponseHandling
             return (accessToken, null);
         }
 
+        async Task<(bool, TokenCreationRequest)> CreateToken(ValidatedRequest request, IAuthorizationModel model)
+        {
+            var createRefreshToken = model.Scopes.Contains(IdentityServerConstants.StandardScopes.OfflineAccess);
+
+            await GetValidatedClient(model.ClientId!);
+
+            var parsedScopesResult = ScopeParser.ParseScopeValues(model.Scopes);
+            var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
+
+            var tokenRequest = new TokenCreationRequest
+            {
+                Subject = model.Subject,
+                Description = model.Description,
+                ValidatedResources = validatedResources,
+                ValidatedRequest = request
+            };
+            return (createRefreshToken, tokenRequest);
+        }
+
         /// <summary>
         /// Creates an id_token for a refresh token request if identity resources have been requested.
         /// </summary>
         /// <param name="request">The request.</param>
         /// <param name="newAccessToken">The new access token.</param>
         /// <returns></returns>
-        protected virtual async Task<string> CreateIdTokenFromRefreshTokenRequestAsync(ValidatedTokenRequest request, string newAccessToken)
+        protected virtual async OptionAsync<string> CreateIdTokenFromRefreshTokenRequestAsync(ValidatedTokenRequest request, string newAccessToken)
         {
             // todo: can we just check for "openid" scope?
             //var identityResources = await Resources.FindEnabledIdentityResourcesByScopeAsync(request.RefreshToken.Scopes);
@@ -465,5 +424,9 @@ namespace IdentityServer4.ResponseHandling
 
             return null;
         }
+
+        Task<Client> GetValidatedClient(Option<string> clientId) =>
+            clientId.BindAsync(Clients.FindClientByIdAsync)
+                    .IfNone(() => throw new InvalidOperationException("Client does not exist anymore."));
     }
 }

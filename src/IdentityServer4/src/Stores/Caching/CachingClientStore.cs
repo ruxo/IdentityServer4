@@ -5,10 +5,11 @@
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
-using System.Threading.Tasks;
 using IdentityServer4.Configuration;
+using LanguageExt;
 using Microsoft.Extensions.Logging;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Stores
 {
     /// <summary>
@@ -46,14 +47,10 @@ namespace IdentityServer4.Stores
         /// <returns>
         /// The client
         /// </returns>
-        public async Task<Client> FindClientByIdAsync(string clientId)
-        {
-            var client = await _cache.GetAsync(clientId,
+        public OptionAsync<Client> FindClientByIdAsync(string clientId) =>
+            _cache.GetAsync(clientId,
                 _options.Caching.ClientStoreExpiration,
                 async () => await _inner.FindClientByIdAsync(clientId),
                 _logger);
-
-            return client;
-        }
     }
 }

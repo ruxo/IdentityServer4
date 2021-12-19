@@ -8,7 +8,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using LanguageExt;
+using static LanguageExt.Prelude;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Stores
 {
     /// <summary>
@@ -24,11 +27,10 @@ namespace IdentityServer4.Stores
         /// <param name="clients">The clients.</param>
         public InMemoryClientStore(IEnumerable<Client> clients)
         {
-            if (clients.HasDuplicates(m => m.ClientId))
-            {
+            var seq = Seq(clients);
+            if (seq.HasDuplicates(m => m.ClientId))
                 throw new ArgumentException("Clients must not contain duplicate ids");
-            }
-            _clients = clients;
+            _clients = seq;
         }
 
         /// <summary>
@@ -38,14 +40,14 @@ namespace IdentityServer4.Stores
         /// <returns>
         /// The client
         /// </returns>
-        public Task<Client> FindClientByIdAsync(string clientId)
+        public OptionAsync<Client> FindClientByIdAsync(string clientId)
         {
             var query =
                 from client in _clients
                 where client.ClientId == clientId
                 select client;
             
-            return Task.FromResult(query.SingleOrDefault());
+            return OptionalAsync(Task.FromResult(query.SingleOrDefault()!));
         }
     }
 }

@@ -2,11 +2,15 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using IdentityServer4.Models;
+using LanguageExt;
+using static LanguageExt.Prelude;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Stores
 {
     /// <summary>
@@ -38,32 +42,32 @@ namespace IdentityServer4.Stores
         /// Finds device authorization by user code.
         /// </summary>
         /// <param name="userCode">The user code.</param>
-        public Task<DeviceCode> FindByUserCodeAsync(string userCode)
-        {
-            DeviceCode foundDeviceCode;
-
-            lock (_repository)
-            {
-                foundDeviceCode = _repository.FirstOrDefault(x => x.UserCode == userCode)?.Data;
-            }
-
-            return Task.FromResult(foundDeviceCode);
-        }
+        public OptionAsync<DeviceCode> FindByUserCodeAsync(string userCode) => FindDeviceCode(x => x.UserCode == userCode);
 
         /// <summary>
         /// Finds device authorization by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
-        public Task<DeviceCode> FindByDeviceCodeAsync(string deviceCode)
-        {
-            DeviceCode foundDeviceCode;
+        public OptionAsync<DeviceCode> FindByDeviceCodeAsync(string deviceCode) => FindDeviceCode(x => x.DeviceCode == deviceCode);
 
+        OptionAsync<InMemoryDeviceAuthorization> FindDeviceAuthorization(Func<InMemoryDeviceAuthorization, bool> predicate)
+        {
+            lock (_repository)
+                return OptionalAsync(Task.FromResult(_repository.FirstOrDefault(predicate)!));
+        }
+        
+        OptionAsync<DeviceCode> FindDeviceCode(Func<InMemoryDeviceAuthorization, bool> predicate) => FindDeviceAuthorization(predicate).Map(a => a.Data);
+
+        Task UpdateDeviceAuthorization(Func<InMemoryDeviceAuthorization, bool> predicate,
+            Action<InMemoryDeviceAuthorization> handler)
+        {
             lock (_repository)
             {
-                foundDeviceCode = _repository.FirstOrDefault(x => x.DeviceCode == deviceCode)?.Data;
+                var foundData = _repository.FirstOrDefault(predicate);
+                if (foundData != null)
+                    handler(foundData);
             }
-
-            return Task.FromResult(foundDeviceCode);
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -71,41 +75,15 @@ namespace IdentityServer4.Stores
         /// </summary>
         /// <param name="userCode">The user code.</param>
         /// <param name="data">The data.</param>
-        public Task UpdateByUserCodeAsync(string userCode, DeviceCode data)
-        {
-            lock (_repository)
-            {
-                var foundData = _repository.FirstOrDefault(x => x.UserCode == userCode);
-
-                if (foundData != null)
-                {
-                    foundData.Data = data;
-                }
-            }
-
-            return Task.CompletedTask;
-        }
+        public Task UpdateByUserCodeAsync(string userCode, DeviceCode data) => UpdateDeviceAuthorization(x => x.UserCode == userCode, x => x.Data = data);
 
         /// <summary>
         /// Removes the device authorization, searching by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
         /// <returns></returns>
-        public Task RemoveByDeviceCodeAsync(string deviceCode)
-        {
-            lock (_repository)
-            {
-                var foundData = _repository.FirstOrDefault(x => x.DeviceCode == deviceCode);
-
-                if (foundData != null)
-                {
-                    _repository.Remove(foundData);
-                }
-            }
-
-
-            return Task.CompletedTask;
-        }
+        // ReSharper disable once InconsistentlySynchronizedField
+        public Task RemoveByDeviceCodeAsync(string deviceCode) => UpdateDeviceAuthorization(x => x.DeviceCode == deviceCode, x => _repository.Remove(x));
 
         private class InMemoryDeviceAuthorization
         {

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using IdentityServer4.Stores;
 using IdentityServer4.Models;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Validation
 {
     /// <summary>

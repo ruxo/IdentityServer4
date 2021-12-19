@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using LanguageExt;
 
 namespace IdentityServer4.Services
 {
@@ -18,7 +19,7 @@ namespace IdentityServer4.Services
         /// <summary>
         /// Gets the current authenticated user.
         /// </summary>
-        Task<ClaimsPrincipal> GetUserAsync();
+        OptionAsync<ClaimsPrincipal> GetUserAsync();
 
         /// <summary>
         /// Gets the current session identifier.

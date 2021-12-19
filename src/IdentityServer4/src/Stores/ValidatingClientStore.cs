@@ -8,6 +8,7 @@ using IdentityServer4.Services;
 using IdentityServer4.Validation;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
+using LanguageExt;
 
 namespace IdentityServer4.Stores
 {
@@ -17,11 +18,11 @@ namespace IdentityServer4.Stores
     public class ValidatingClientStore<T> : IClientStore
         where T : IClientStore
     {
-        private readonly IClientStore _inner;
-        private readonly IClientConfigurationValidator _validator;
-        private readonly IEventService _events;
-        private readonly ILogger<ValidatingClientStore<T>> _logger;
-        private readonly string _validatorType;
+        readonly IClientStore _inner;
+        readonly IClientConfigurationValidator _validator;
+        readonly IEventService _events;
+        readonly ILogger<ValidatingClientStore<T>> _logger;
+        readonly string _validatorType;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ValidatingClientStore{T}" /> class.
@@ -37,7 +38,7 @@ namespace IdentityServer4.Stores
             _events = events;
             _logger = logger;
 
-            _validatorType = validator.GetType().FullName;
+            _validatorType = validator.GetType().FullName!;
         }
 
         /// <summary>
@@ -47,7 +48,7 @@ namespace IdentityServer4.Stores
         /// <returns>
         /// The client or an InvalidOperationException
         /// </returns>
-        public async Task<Client> FindClientByIdAsync(string clientId)
+        public async OptionAsync<Client> FindClientByIdAsync(string clientId)
         {
             var client = await _inner.FindClientByIdAsync(clientId);
 
