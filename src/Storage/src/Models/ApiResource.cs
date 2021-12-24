@@ -6,6 +6,7 @@ using IdentityServer4.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace IdentityServer4.Models
 {
@@ -16,7 +17,7 @@ namespace IdentityServer4.Models
     public class ApiResource : Resource
     {
         private string DebuggerDisplay => Name ?? $"{{{typeof(ApiResource)}}}";
-        
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ApiResource"/> class.
         /// </summary>
@@ -66,14 +67,7 @@ namespace IdentityServer4.Models
 
             Name = name;
             DisplayName = displayName;
-
-            if (!userClaims.IsNullOrEmpty())
-            {
-                foreach (var type in userClaims)
-                {
-                    UserClaims.Add(type);
-                }
-            }
+            UserClaims = userClaims.ToArray();
         }
 
         /// <summary>
@@ -89,6 +83,6 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Signing algorithm for access token. If empty, will use the server default signing algorithm.
         /// </summary>
-        public ICollection<string> AllowedAccessTokenSigningAlgorithms { get; set; } = new HashSet<string>();
+        public string[] AllowedAccessTokenSigningAlgorithms { get; set; } =Array.Empty<string>();
     }
 }

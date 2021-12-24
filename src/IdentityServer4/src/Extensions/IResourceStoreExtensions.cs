@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System;
 using IdentityServer4.Validation;
+using static LanguageExt.Prelude;
 
 namespace IdentityServer4.Stores
 {
@@ -24,21 +25,22 @@ namespace IdentityServer4.Stores
         /// <returns></returns>
         public static async Task<Resources> FindResourcesByScopeAsync(this IResourceStore store, IEnumerable<string> scopeNames)
         {
-            var identity = await store.FindIdentityResourcesByScopeNameAsync(scopeNames);
-            var apiResources = await store.FindApiResourcesByScopeNameAsync(scopeNames);
-            var scopes = await store.FindApiScopesByNameAsync(scopeNames);
+            var names = Seq(scopeNames);
+            var identity = Seq(await store.FindIdentityResourcesByScopeNameAsync(names));
+            var apiResources = Seq(await store.FindApiResourcesByScopeNameAsync(names));
+            var scopes = Seq(await store.FindApiScopesByNameAsync(names));
 
             Validate(identity, apiResources, scopes);
 
             var resources = new Resources(identity, apiResources, scopes)
             {
-                OfflineAccess = scopeNames.Contains(IdentityServerConstants.StandardScopes.OfflineAccess)
+                OfflineAccess = names.Contains(IdentityServerConstants.StandardScopes.OfflineAccess)
             };
 
             return resources;
         }
 
-        private static void Validate(IEnumerable<IdentityResource> identity, IEnumerable<ApiResource> apiResources, IEnumerable<ApiScope> apiScopes)
+        static void Validate(IEnumerable<IdentityResource> identity, IEnumerable<ApiResource> apiResources, IEnumerable<ApiScope> apiScopes)
         {
             // attempt to detect invalid configuration. this is about the only place
             // we can do this, since it's hard to get the values in the store.
@@ -59,7 +61,7 @@ namespace IdentityServer4.Stores
                 throw new Exception(
                     $"Duplicate api resources found. This is an invalid configuration. Use different names for API resources. Names found: {names}");
             }
-            
+
             var scopesNames = apiScopes.Select(x => x.Name);
             dups = GetDuplicates(scopesNames);
             if (dups.Any())
@@ -78,15 +80,12 @@ namespace IdentityServer4.Stores
             }
         }
 
-        private static IEnumerable<string> GetDuplicates(IEnumerable<string> names)
-        {
-            var duplicates = names
-                            .GroupBy(x => x)
-                            .Where(g => g.Count() > 1)
-                            .Select(y => y.Key)
-                            .ToArray();
-            return duplicates.ToArray();
-        }
+        static string[] GetDuplicates(IEnumerable<string> names) =>
+            (from n in names
+             group n by n into g
+             where g.Count() > 1
+             select g.Key)
+           .ToArray();
 
         /// <summary>
         /// Finds the enabled resources by scope.
@@ -94,10 +93,8 @@ namespace IdentityServer4.Stores
         /// <param name="store">The store.</param>
         /// <param name="scopeNames">The scope names.</param>
         /// <returns></returns>
-        public static async Task<Resources> FindEnabledResourcesByScopeAsync(this IResourceStore store, IEnumerable<string> scopeNames)
-        {
-            return (await store.FindResourcesByScopeAsync(scopeNames)).FilterEnabled();
-        }
+        public static async Task<Resources> FindEnabledResourcesByScopeAsync(this IResourceStore store, IEnumerable<string> scopeNames) =>
+            (await store.FindResourcesByScopeAsync(scopeNames)).FilterEnabled();
 
         /// <summary>
         /// Creates a resource validation result.

@@ -26,6 +26,8 @@
     <LangVersion>10</LangVersion>
 
     <Nullable>enable</Nullable>
+
+    <RootNamespace>IdentityServer4</RootNamespace>
   </PropertyGroup>
 
   <PropertyGroup>

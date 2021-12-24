@@ -37,7 +37,7 @@ namespace IdentityServer4.Validation
         /// <returns></returns>
         public async Task<IntrospectionRequestValidationResult> ValidateAsync(NameValueCollection parameters, ApiResource api)
         {
-            _logger.LogDebug("Introspection request validation started.");
+            _logger.LogDebug("Introspection request validation started");
 
             // retrieve required token
             var token = parameters.Get("token");
@@ -45,8 +45,7 @@ namespace IdentityServer4.Validation
             {
                 _logger.LogError("Token is missing");
 
-                return new IntrospectionRequestValidationResult
-                {
+                return new(){
                     IsError = true,
                     Api = api,
                     Error = "missing_token",
@@ -60,10 +59,9 @@ namespace IdentityServer4.Validation
             // invalid or unknown token
             if (tokenValidationResult.IsError)
             {
-                _logger.LogDebug("Token is invalid.");
+                _logger.LogDebug("Token is invalid");
 
-                return new IntrospectionRequestValidationResult
-                {
+                return new(){
                     IsActive = false,
                     IsError = false,
                     Token = token,
@@ -72,11 +70,10 @@ namespace IdentityServer4.Validation
                 };
             }
 
-            _logger.LogDebug("Introspection request validation successful.");
+            _logger.LogDebug("Introspection request validation successful");
 
             // valid token
-            return new IntrospectionRequestValidationResult
-            {
+            return new(){
                 IsActive = true,
                 IsError = false,
                 Token = token,

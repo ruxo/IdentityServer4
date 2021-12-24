@@ -94,7 +94,7 @@ namespace IdentityServer4.Models
         }
     }
 #pragma warning restore CS1591
-    
+
     /// <summary>
     /// Models an OpenID Connect or OAuth2 client
     /// </summary>
@@ -102,9 +102,9 @@ namespace IdentityServer4.Models
     public class Client
     {
         // setting grant types should be atomic
-        private GrantTypeValidatingHashSet _allowedGrantTypes = new();
+        GrantTypeValidatingHashSet _allowedGrantTypes = new();
 
-        private string DebuggerDisplay => ClientId ?? $"{{{typeof(Client)}}}";
+        string DebuggerDisplay => ClientId ?? $"{{{typeof(Client)}}}";
 
         /// <summary>
         /// Specifies if client is enabled (defaults to <c>true</c>)
@@ -114,7 +114,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Unique ID of the client
         /// </summary>
-        public string? ClientId { get; set; }
+        public string ClientId { get; set; } = null!;
 
         /// <summary>
         /// Gets or sets the protocol type.
@@ -191,7 +191,7 @@ namespace IdentityServer4.Models
         /// Specifies whether the client must use a request object on authorize requests (defaults to <c>false</c>.)
         /// </summary>
         public bool RequireRequestObject { get; set; } = false;
-        
+
         /// <summary>
         /// Controls whether access tokens are transmitted via the browser for this client (defaults to <c>false</c>).
         /// This can prevent accidental leakage of access tokens when multiple response types are allowed.
@@ -255,7 +255,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Signing algorithm for identity token. If empty, will use the server default signing algorithm.
         /// </summary>
-        public System.Collections.Generic.HashSet<string> AllowedIdentityTokenSigningAlgorithms { get; set; } = new();
+        public string[] AllowedIdentityTokenSigningAlgorithms { get; set; } = System.Array.Empty<string>();
 
         /// <summary>
         /// Lifetime of access token in seconds (defaults to 3600 seconds / 1 hour)
@@ -300,7 +300,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Absolute: the refresh token will expire on a fixed point in time (specified by the AbsoluteRefreshTokenLifetime)
         /// Sliding: when refreshing the token, the lifetime of the refresh token will be renewed (by the amount specified in SlidingRefreshTokenLifetime). The lifetime will not exceed AbsoluteRefreshTokenLifetime.
-        /// </summary>        
+        /// </summary>
         public TokenExpiration RefreshTokenExpiration { get; set; } = TokenExpiration.Absolute;
 
         /// <summary>

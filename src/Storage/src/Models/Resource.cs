@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Models
 {
     /// <summary>
@@ -13,7 +15,15 @@ namespace IdentityServer4.Models
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
     public abstract class Resource
     {
-        private string DebuggerDisplay => Name ?? $"{{{typeof(Resource)}}}";
+        string DebuggerDisplay => Name;
+
+        /// <summary>
+        /// New Resource
+        /// </summary>
+        protected Resource()
+        {
+            Name = $"{{{GetType()}}}";
+        }
 
         /// <summary>
         /// Indicates if this resource is enabled. Defaults to true.
@@ -28,12 +38,12 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Display name of the resource.
         /// </summary>
-        public string DisplayName { get; set; }
+        public string? DisplayName { get; set; }
         
         /// <summary>
         /// Description of the resource.
         /// </summary>
-        public string Description { get; set; }
+        public string? Description { get; set; }
 
         /// <summary>
         /// Specifies whether this scope is shown in the discovery document. Defaults to true.
@@ -43,7 +53,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// List of associated user claims that should be included when this resource is requested.
         /// </summary>
-        public ICollection<string> UserClaims { get; set; } = new HashSet<string>();
+        public string[] UserClaims { get; set; } = Array.Empty<string>();
 
         /// <summary>
         /// Gets or sets the custom properties for the resource.
@@ -51,6 +61,6 @@ namespace IdentityServer4.Models
         /// <value>
         /// The properties.
         /// </value>
-        public IDictionary<string, string> Properties { get; set; } = new Dictionary<string, string>();
+        public Dictionary<string, string> Properties { get; set; } = new();
     }
 }

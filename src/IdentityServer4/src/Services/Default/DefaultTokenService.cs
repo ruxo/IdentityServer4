@@ -16,6 +16,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
+// ReSharper disable once CheckNamespace
 namespace IdentityServer4.Services
 {
     /// <summary>
@@ -121,34 +122,34 @@ namespace IdentityServer4.Services
             // if nonce was sent, must be mirrored in id token
             if (request.Nonce.IsPresent())
             {
-                claims.Add(new Claim(JwtClaimTypes.Nonce, request.Nonce));
+                claims.Add(new(JwtClaimTypes.Nonce, request.Nonce));
             }
 
             // add iat claim
-            claims.Add(new Claim(JwtClaimTypes.IssuedAt, Clock.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64));
+            claims.Add(new(JwtClaimTypes.IssuedAt, Clock.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64));
 
             // add at_hash claim
             if (request.AccessTokenToHash.IsPresent())
             {
-                claims.Add(new Claim(JwtClaimTypes.AccessTokenHash, CryptoHelper.CreateHashClaimValue(request.AccessTokenToHash, signingAlgorithm)));
+                claims.Add(new(JwtClaimTypes.AccessTokenHash, CryptoHelper.CreateHashClaimValue(request.AccessTokenToHash, signingAlgorithm)));
             }
 
             // add c_hash claim
             if (request.AuthorizationCodeToHash.IsPresent())
             {
-                claims.Add(new Claim(JwtClaimTypes.AuthorizationCodeHash, CryptoHelper.CreateHashClaimValue(request.AuthorizationCodeToHash, signingAlgorithm)));
+                claims.Add(new(JwtClaimTypes.AuthorizationCodeHash, CryptoHelper.CreateHashClaimValue(request.AuthorizationCodeToHash, signingAlgorithm)));
             }
 
             // add s_hash claim
             if (request.StateHash.IsPresent())
             {
-                claims.Add(new Claim(JwtClaimTypes.StateHash, request.StateHash));
+                claims.Add(new(JwtClaimTypes.StateHash, request.StateHash));
             }
 
             // add sid if present
             if (request.ValidatedRequest.SessionId.IsPresent())
             {
-                claims.Add(new Claim(JwtClaimTypes.SessionId, request.ValidatedRequest.SessionId));
+                claims.Add(new(JwtClaimTypes.SessionId, request.ValidatedRequest.SessionId));
             }
 
             claims.AddRange(await ClaimsProvider.GetIdentityTokenClaimsAsync(
@@ -157,7 +158,7 @@ namespace IdentityServer4.Services
                 request.IncludeAllIdentityClaims,
                 request.ValidatedRequest));
 
-            var issuer = ContextAccessor.HttpContext.GetIdentityServerIssuerUri();
+            var issuer = ContextAccessor.HttpContext!.GetIdentityServerIssuerUri();
 
             var token = new Token(OidcConstants.TokenTypes.IdentityToken)
             {
@@ -193,20 +194,16 @@ namespace IdentityServer4.Services
                 request.ValidatedRequest));
 
             if (request.ValidatedRequest.Client.IncludeJwtId)
-            {
-                claims.Add(new Claim(JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId(16, CryptoRandom.OutputFormat.Hex)));
-            }
+                claims.Add(new(JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId(16, CryptoRandom.OutputFormat.Hex)));
 
             if (request.ValidatedRequest.SessionId.IsPresent())
-            {
-                claims.Add(new Claim(JwtClaimTypes.SessionId, request.ValidatedRequest.SessionId));
-            }
-            
+                claims.Add(new(JwtClaimTypes.SessionId, request.ValidatedRequest.SessionId));
+
             // iat claim as required by JWT profile
-            claims.Add(new Claim(JwtClaimTypes.IssuedAt, Clock.UtcNow.ToUnixTimeSeconds().ToString(),
+            claims.Add(new(JwtClaimTypes.IssuedAt, Clock.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64));
 
-            var issuer = ContextAccessor.HttpContext.GetIdentityServerIssuerUri();
+            var issuer = ContextAccessor.HttpContext!.GetIdentityServerIssuerUri();
             var token = new Token(OidcConstants.TokenTypes.AccessToken)
             {
                 CreationTime = Clock.UtcNow.UtcDateTime,
@@ -239,7 +236,7 @@ namespace IdentityServer4.Services
             {
                 if (Options.MutualTls.AlwaysEmitConfirmationClaim)
                 {
-                    var clientCertificate = await ContextAccessor.HttpContext.Connection.GetClientCertificateAsync();
+                    var clientCertificate = await ContextAccessor.HttpContext!.Connection.GetClientCertificateAsync();
                     if (clientCertificate != null)
                     {
                         token.Confirmation = clientCertificate.CreateThumbprintCnf();

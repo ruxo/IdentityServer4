@@ -35,6 +35,6 @@ namespace IdentityServer4.Services
         /// <returns>
         /// Claims for the access token
         /// </returns>
-        Task<IEnumerable<Claim>> GetAccessTokenClaimsAsync(ClaimsPrincipal subject, ResourceValidationResult resources, ValidatedRequest request);
+        Task<IEnumerable<Claim>> GetAccessTokenClaimsAsync(ClaimsPrincipal? subject, ResourceValidationResult resources, ValidatedRequest request);
     }
 }

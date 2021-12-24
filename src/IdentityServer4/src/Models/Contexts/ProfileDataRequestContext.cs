@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using System.Security.Claims;
 using System;
+using System.Linq;
 using IdentityServer4.Validation;
 
 namespace IdentityServer4.Models
@@ -32,7 +33,7 @@ namespace IdentityServer4.Models
             Subject = subject ?? throw new ArgumentNullException(nameof(subject));
             Client = client ?? throw new ArgumentNullException(nameof(client));
             Caller = caller ?? throw new ArgumentNullException(nameof(caller));
-            RequestedClaimTypes = requestedClaimTypes ?? throw new ArgumentNullException(nameof(requestedClaimTypes));
+            RequestedClaimTypes = requestedClaimTypes.ToArray();
         }
 
         /// <summary>

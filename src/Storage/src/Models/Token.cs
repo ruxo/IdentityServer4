@@ -34,7 +34,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// A list of allowed algorithm for signing the token. If null or empty, will use the default algorithm.
         /// </summary>
-        public ICollection<string> AllowedSigningAlgorithms { get; set; } = new HashSet<string>();
+        public string[] AllowedSigningAlgorithms { get; set; } = Array.Empty<string>();
 
         /// <summary>
         /// Specifies the confirmation method of the token. This value, if set, will become the cnf claim.
@@ -48,7 +48,7 @@ namespace IdentityServer4.Models
         /// The audiences.
         /// </value>
         public ICollection<string> Audiences { get; set; } = new HashSet<string>();
-        
+
         /// <summary>
         /// Gets or sets the issuer.
         /// </summary>
@@ -56,7 +56,7 @@ namespace IdentityServer4.Models
         /// The issuer.
         /// </value>
         public string Issuer { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the creation time.
         /// </summary>
@@ -64,7 +64,7 @@ namespace IdentityServer4.Models
         /// The creation time.
         /// </value>
         public DateTime CreationTime { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the lifetime.
         /// </summary>
@@ -104,7 +104,7 @@ namespace IdentityServer4.Models
         /// The description.
         /// </value>
         public string Description { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the claims.
         /// </summary>

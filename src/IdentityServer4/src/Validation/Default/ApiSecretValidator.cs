@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Threading.Tasks;
+using static LanguageExt.Prelude;
 
 namespace IdentityServer4.Validation
 {
@@ -64,8 +65,8 @@ namespace IdentityServer4.Validation
             }
 
             // load API resource
-            var apis = await _resources.FindApiResourcesByNameAsync(new[] { parsedSecret.Id });
-            if (apis == null || !apis.Any())
+            var apis = Seq(await _resources.FindApiResourcesByNameAsync(new[] { parsedSecret.Id }));
+            if (!apis.Any())
             {
                 await RaiseFailureEventAsync(parsedSecret.Id, "Unknown API resource");
 
@@ -87,7 +88,7 @@ namespace IdentityServer4.Validation
             {
                 await RaiseFailureEventAsync(parsedSecret.Id, "API resource not enabled");
 
-                _logger.LogError("API resource not enabled. aborting.");
+                _logger.LogError("API resource not enabled. aborting");
                 return fail;
             }
 
@@ -96,18 +97,12 @@ namespace IdentityServer4.Validation
             {
                 _logger.LogDebug("API resource validation success");
 
-                var success = new ApiSecretValidationResult
-                {
-                    IsError = false,
-                    Resource = api
-                };
-
                 await RaiseSuccessEventAsync(api.Name, parsedSecret.Type);
-                return success;
+                return new(){ IsError  = false, Resource = api };
             }
 
             await RaiseFailureEventAsync(api.Name, "Invalid API secret");
-            _logger.LogError("API validation failed.");
+            _logger.LogError("API validation failed");
 
             return fail;
         }

@@ -26,7 +26,7 @@ namespace IdentityServer4.Models
                 Name = IdentityServerConstants.StandardScopes.OpenId;
                 DisplayName = "Your user identifier";
                 Required = true;
-                UserClaims.Add(JwtClaimTypes.Subject);
+                UserClaims = UserClaims.Append(JwtClaimTypes.Subject).ToArray();
             }
         }
 
@@ -45,7 +45,7 @@ namespace IdentityServer4.Models
                 DisplayName = "User profile";
                 Description = "Your user profile information (first name, last name, etc.)";
                 Emphasize = true;
-                UserClaims = Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Profile].ToList();
+                UserClaims = Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Profile].ToArray();
             }
         }
 
@@ -63,7 +63,7 @@ namespace IdentityServer4.Models
                 Name = IdentityServerConstants.StandardScopes.Email;
                 DisplayName = "Your email address";
                 Emphasize = true;
-                UserClaims = (Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Email].ToList());
+                UserClaims = Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Email].ToArray();
             }
         }
 
@@ -81,7 +81,7 @@ namespace IdentityServer4.Models
                 Name = IdentityServerConstants.StandardScopes.Phone;
                 DisplayName = "Your phone number";
                 Emphasize = true;
-                UserClaims = Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Phone].ToList();
+                UserClaims = Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Phone].ToArray();
             }
         }
 
@@ -99,7 +99,7 @@ namespace IdentityServer4.Models
                 Name = IdentityServerConstants.StandardScopes.Address;
                 DisplayName = "Your postal address";
                 Emphasize = true;
-                UserClaims = Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Address].ToList();
+                UserClaims = Constants.ScopeToClaimsMapping[IdentityServerConstants.StandardScopes.Address].ToArray();
             }
         }
     }

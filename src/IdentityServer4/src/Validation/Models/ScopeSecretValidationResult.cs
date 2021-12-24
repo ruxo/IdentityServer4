@@ -17,6 +17,6 @@ namespace IdentityServer4.Validation
         /// <value>
         /// The resource.
         /// </value>
-        public ApiResource Resource { get; set; }
+        public ApiResource? Resource { get; set; }
     }
 }

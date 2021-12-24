@@ -6,6 +6,7 @@ using IdentityServer4.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace IdentityServer4.Models
 {
@@ -15,7 +16,9 @@ namespace IdentityServer4.Models
     [DebuggerDisplay("{" + nameof(DebuggerDisplay) + ",nq}")]
     public class ApiScope : Resource
     {
-        private string DebuggerDisplay => Name ?? $"{{{typeof(ApiScope)}}}";
+        string DebuggerDisplay => Name;
+        
+        #region Constructors
         
         /// <summary>
         /// Initializes a new instance of the <see cref="ApiScope"/> class.
@@ -66,24 +69,19 @@ namespace IdentityServer4.Models
 
             Name = name;
             DisplayName = displayName;
-
-            if (!userClaims.IsNullOrEmpty())
-            {
-                foreach (var type in userClaims)
-                {
-                    UserClaims.Add(type);
-                }
-            }
+            UserClaims = UserClaims.Concat(userClaims).ToArray();
         }
+        
+        #endregion
 
         /// <summary>
         /// Specifies whether the user can de-select the scope on the consent screen. Defaults to false.
         /// </summary>
-        public bool Required { get; set; } = false;
+        public bool Required { get; set; }
 
         /// <summary>
         /// Specifies whether the consent screen will emphasize this scope. Use this setting for sensitive or important scopes. Defaults to false.
         /// </summary>
-        public bool Emphasize { get; set; } = false;
+        public bool Emphasize { get; set; }
     }
 }

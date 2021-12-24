@@ -55,7 +55,7 @@ namespace IdentityServer4.Validation
             _logger = logger;
         }
 
-        public async Task<AuthorizeRequestValidationResult> ValidateAsync(NameValueCollection parameters, ClaimsPrincipal subject = null)
+        public async Task<AuthorizeRequestValidationResult> ValidateAsync(NameValueCollection parameters, ClaimsPrincipal? subject = null)
         {
             _logger.LogDebug("Start authorize request protocol validation");
 
