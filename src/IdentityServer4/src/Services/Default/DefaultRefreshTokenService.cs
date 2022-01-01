@@ -7,10 +7,8 @@ using IdentityServer4.Models;
 using IdentityServer4.Stores;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
-using System.Threading.Tasks;
 using IdentityModel;
-using IdentityServer4.Logging.Models;
-using IdentityServer4.Validation;
+using IdentityServer4.Validation.Models;
 using Microsoft.AspNetCore.Authentication;
 
 namespace IdentityServer4.Services
@@ -64,86 +62,61 @@ namespace IdentityServer4.Services
         /// <param name="tokenHandle">The token handle.</param>
         /// <param name="client">The client.</param>
         /// <returns></returns>
-        public virtual async Task<TokenValidationResult> ValidateRefreshTokenAsync(string tokenHandle, Client client)
+        public virtual async Task<Either<ErrorInfo, RefreshToken>> ValidateRefreshTokenAsync(string tokenHandle, Client client)
         {
-            var invalidGrant = new TokenValidationResult
-            {
-                IsError = true, Error = OidcConstants.TokenErrors.InvalidGrant
-            };
+            var invalidGrant = new ErrorInfo(OidcConstants.TokenErrors.InvalidGrant);
 
             Logger.LogTrace("Start refresh token validation");
 
-            /////////////////////////////////////////////
             // check if refresh token is valid
-            /////////////////////////////////////////////
-            var refreshToken = await RefreshTokenStore.GetRefreshTokenAsync(tokenHandle);
-            if (refreshToken == null)
+            var rt = await RefreshTokenStore.GetRefreshTokenAsync(tokenHandle);
+            if (rt.IsNone)
             {
                 Logger.LogWarning("Invalid refresh token");
                 return invalidGrant;
             }
+            var refreshToken = rt.Get();
 
-            /////////////////////////////////////////////
             // check if refresh token has expired
-            /////////////////////////////////////////////
             if (refreshToken.CreationTime.HasExceeded(refreshToken.Lifetime, Clock.UtcNow.DateTime))
             {
-                Logger.LogWarning("Refresh token has expired.");
-                return invalidGrant;
-            }
-            
-            /////////////////////////////////////////////
-            // check if client belongs to requested refresh token
-            /////////////////////////////////////////////
-            if (client.ClientId != refreshToken.ClientId)
-            {
-                Logger.LogError("{0} tries to refresh token belonging to {1}", client.ClientId, refreshToken.ClientId);
+                Logger.LogWarning("Refresh token has expired");
                 return invalidGrant;
             }
 
-            /////////////////////////////////////////////
-            // check if client still has offline_access scope
-            /////////////////////////////////////////////
-            if (!client.AllowOfflineAccess)
+            // check if client belongs to requested refresh token
+            if (client.ClientId != refreshToken.ClientId)
             {
-                Logger.LogError("{clientId} does not have access to offline_access scope anymore", client.ClientId);
+                Logger.LogError("{ClientId} tries to refresh token belonging to {RefreshToken}", client.ClientId, refreshToken.ClientId);
                 return invalidGrant;
             }
-            
-            /////////////////////////////////////////////
-            // check if refresh token has been consumed
-            /////////////////////////////////////////////
-            if (refreshToken.ConsumedTime.HasValue)
+
+            // check if client still has offline_access scope
+            if (!client.AllowOfflineAccess)
             {
-                if ((await AcceptConsumedTokenAsync(refreshToken)) == false)
+                Logger.LogError("{ClientId} does not have access to offline_access scope anymore", client.ClientId);
+                return invalidGrant;
+            }
+
+            // check if refresh token has been consumed
+            if (refreshToken.ConsumedTime.IsSome)
+            {
+                if (!await AcceptConsumedTokenAsync(refreshToken))
                 {
-                    Logger.LogWarning("Rejecting refresh token because it has been consumed already.");
+                    Logger.LogWarning("Rejecting refresh token because it has been consumed already");
                     return invalidGrant;
                 }
             }
-            
-            /////////////////////////////////////////////
+
             // make sure user is enabled
-            /////////////////////////////////////////////
-            var isActiveCtx = new IsActiveContext(
-                refreshToken.Subject,
-                client,
-                IdentityServerConstants.ProfileIsActiveCallers.RefreshTokenValidation);
+            var isActive = await Profile.IsActiveAsync(refreshToken.Subject, client, IdentityServerConstants.ProfileIsActiveCallers.RefreshTokenValidation);
 
-            await Profile.IsActiveAsync(isActiveCtx);
-
-            if (isActiveCtx.IsActive == false)
+            if (!isActive)
             {
-                Logger.LogError("{subjectId} has been disabled", refreshToken.Subject.GetSubjectId());
+                Logger.LogError("{SubjectId} has been disabled", refreshToken.Subject.GetSubjectId());
                 return invalidGrant;
             }
-            
-            return new TokenValidationResult
-            {
-                IsError = false, 
-                RefreshToken = refreshToken, 
-                Client = client
-            };
+            return refreshToken;
         }
 
         /// <summary>
@@ -176,8 +149,7 @@ namespace IdentityServer4.Services
             int lifetime;
             if (client.RefreshTokenExpiration == TokenExpiration.Absolute)
             {
-                Logger.LogDebug("Setting an absolute lifetime: {absoluteLifetime}",
-                    client.AbsoluteRefreshTokenLifetime);
+                Logger.LogDebug("Setting an absolute lifetime: {AbsoluteLifetime}", client.AbsoluteRefreshTokenLifetime);
                 lifetime = client.AbsoluteRefreshTokenLifetime;
             }
             else

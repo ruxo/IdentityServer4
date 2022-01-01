@@ -27,13 +27,13 @@ namespace IdentityServer4.Stores
         /// </summary>
         /// <param name="userCode">The user code.</param>
         /// <returns></returns>
-        OptionAsync<DeviceCode> FindByUserCodeAsync(string userCode);
+        Task<Option<DeviceCode>> FindByUserCodeAsync(string userCode);
 
         /// <summary>
         /// Finds device authorization by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
-        OptionAsync<DeviceCode> FindByDeviceCodeAsync(string deviceCode);
+        Task<Option<DeviceCode>> FindByDeviceCodeAsync(string deviceCode);
 
         /// <summary>
         /// Updates device authorization, searching by user code.

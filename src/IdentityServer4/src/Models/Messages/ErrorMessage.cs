@@ -15,7 +15,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The display mode.
         /// </value>
-        public string DisplayMode { get; set; }
+        public Option<string> DisplayMode { get; set; }
 
         /// <summary>
         /// The UI locales passed from the authorization request.
@@ -23,7 +23,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The UI locales.
         /// </value>
-        public string UiLocales { get; set; }
+        public Option<string> UiLocales { get; set; }
 
         /// <summary>
         /// Gets or sets the error code.
@@ -39,7 +39,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The error description.
         /// </value>
-        public string ErrorDescription { get; set; }
+        public string? ErrorDescription { get; set; }
 
         /// <summary>
         /// The per-request identifier. This can be used to display to the end user and can be used in diagnostics.
@@ -53,7 +53,7 @@ namespace IdentityServer4.Models
         /// The redirect URI.
         /// </summary>
         public string RedirectUri { get; set; }
-        
+
         /// <summary>
         /// The response mode.
         /// </summary>

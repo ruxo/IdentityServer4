@@ -19,7 +19,7 @@ namespace IdentityServer4.Stores
     /// </summary>
     public class InMemoryClientStore : IClientStore
     {
-        private readonly IEnumerable<Client> _clients;
+        readonly IEnumerable<Client> _clients;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="InMemoryClientStore"/> class.
@@ -40,14 +40,9 @@ namespace IdentityServer4.Stores
         /// <returns>
         /// The client
         /// </returns>
-        public OptionAsync<Client> FindClientByIdAsync(string clientId)
-        {
-            var query =
-                from client in _clients
-                where client.ClientId == clientId
-                select client;
-            
-            return OptionalAsync(Task.FromResult(query.SingleOrDefault()!));
-        }
+        public Task<Option<Client>> FindClientByIdAsync(string clientId) =>
+            Task.FromResult(Optional((from client in _clients
+                                      where client.ClientId == clientId
+                                      select client).SingleOrDefault()!));
     }
 }

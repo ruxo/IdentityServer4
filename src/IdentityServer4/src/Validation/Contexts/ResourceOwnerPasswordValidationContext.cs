@@ -2,45 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Models;
+using IdentityServer4.Validation.Models;
 
-namespace IdentityServer4.Validation
-{
-    /// <summary>
-    /// Class describing the resource owner password validation context
-    /// </summary>
-    public class ResourceOwnerPasswordValidationContext
-    {
-        /// <summary>
-        /// Gets or sets the name of the user.
-        /// </summary>
-        /// <value>
-        /// The name of the user.
-        /// </value>
-        public string UserName { get; set; }
+namespace IdentityServer4.Validation.Contexts;
 
-        /// <summary>
-        /// Gets or sets the password.
-        /// </summary>
-        /// <value>
-        /// The password.
-        /// </value>
-        public string Password { get; set; }
-
-        /// <summary>
-        /// Gets or sets the request.
-        /// </summary>
-        /// <value>
-        /// The request.
-        /// </value>
-        public ValidatedTokenRequest Request { get; set; }
-
-        /// <summary>
-        /// Gets or sets the result.
-        /// </summary>
-        /// <value>
-        /// The result.
-        /// </value>
-        public GrantValidationResult Result { get; set; } = new GrantValidationResult(TokenRequestErrors.InvalidGrant);
-    }
-}
+/// <summary>
+/// Class describing the resource owner password validation context
+/// </summary>
+public sealed record ResourceOwnerPasswordValidationContext(string UserName, string Password, ValidatedTokenRequest Request);

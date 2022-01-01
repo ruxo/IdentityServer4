@@ -1,73 +1,68 @@
-﻿using System.Collections.Generic;
-using System.Threading.Tasks;
-using IdentityModel;
+﻿using IdentityModel;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
 using Microsoft.Extensions.Caching.Distributed;
 
-namespace IdentityServer4.Stores.Default
+namespace IdentityServer4.Stores.Default;
+
+/// <summary>
+/// Implementation of IAuthorizationParametersMessageStore that uses the IDistributedCache.
+/// </summary>
+// ReSharper disable once UnusedType.Global
+public class DistributedCacheAuthorizationParametersMessageStore : IAuthorizationParametersMessageStore
 {
+    readonly IDistributedCache distributedCache;
+    readonly IHandleGenerationService handleGenerationService;
+
     /// <summary>
-    /// Implementation of IAuthorizationParametersMessageStore that uses the IDistributedCache.
+    /// Ctor.
     /// </summary>
-    public class DistributedCacheAuthorizationParametersMessageStore : IAuthorizationParametersMessageStore
+    /// <param name="distributedCache"></param>
+    /// <param name="handleGenerationService"></param>
+    public DistributedCacheAuthorizationParametersMessageStore(IDistributedCache distributedCache, IHandleGenerationService handleGenerationService)
     {
-        private readonly IDistributedCache _distributedCache;
-        private readonly IHandleGenerationService _handleGenerationService;
+        this.distributedCache = distributedCache;
+        this.handleGenerationService = handleGenerationService;
+    }
 
-        /// <summary>
-        /// Ctor.
-        /// </summary>
-        /// <param name="distributedCache"></param>
-        /// <param name="handleGenerationService"></param>
-        public DistributedCacheAuthorizationParametersMessageStore(IDistributedCache distributedCache, IHandleGenerationService handleGenerationService)
-        {
-            _distributedCache = distributedCache;
-            _handleGenerationService = handleGenerationService;
-        }
+    string CacheKeyPrefix => "DistributedCacheAuthorizationParametersMessageStore";
 
-        private string CacheKeyPrefix => "DistributedCacheAuthorizationParametersMessageStore";
-        
-        /// <inheritdoc/>
-        public async Task<string> WriteAsync(Message<IDictionary<string, string[]>> message)
-        {
-            // since this store is trusted and the JWT request processing has provided redundant entries
-            // in the NameValueCollection, we are removing the JWT "request_uri" param so that when they
-            // are reloaded/revalidated we don't re-trigger outbound requests. we could possibly do the
-            // same for the "request" param, but it's less of a concern (as it's just a signature check).
-            message.Data.Remove(OidcConstants.AuthorizeRequest.RequestUri);
+    /// <inheritdoc/>
+    public async Task<string> WriteAsync(Message<IDictionary<string, string[]>> message)
+    {
+        // since this store is trusted and the JWT request processing has provided redundant entries
+        // in the Dictionary<string,string>, we are removing the JWT "request_uri" param so that when they
+        // are reloaded/revalidated we don't re-trigger outbound requests. we could possibly do the
+        // same for the "request" param, but it's less of a concern (as it's just a signature check).
+        message.Data.Remove(OidcConstants.AuthorizeRequest.RequestUri);
 
-            var key = await _handleGenerationService.GenerateAsync();
-            var cacheKey = $"{CacheKeyPrefix}-{key}";
-            
-            var json = ObjectSerializer.ToString(message);
+        var key = await handleGenerationService.GenerateAsync();
+        var cacheKey = $"{CacheKeyPrefix}-{key}";
 
-            var options = new DistributedCacheEntryOptions();
-            options.SetSlidingExpiration(Constants.DefaultCacheDuration);
+        var json = ObjectSerializer.ToString(message);
 
-            await _distributedCache.SetStringAsync(cacheKey, json, options);
+        var options = new DistributedCacheEntryOptions();
+        options.SetSlidingExpiration(Constants.DefaultCacheDuration);
 
-            return key;
-        }
+        await distributedCache.SetStringAsync(cacheKey, json, options);
 
-        /// <inheritdoc/>
-        public async Task<Message<IDictionary<string, string[]>>> ReadAsync(string id)
-        {
-            var cacheKey = $"{CacheKeyPrefix}-{id}";
-            var json = await _distributedCache.GetStringAsync(cacheKey);
+        return key;
+    }
 
-            if (json == null)
-            {
-                return new Message<IDictionary<string, string[]>>(new Dictionary<string, string[]>());
-            }
+    /// <inheritdoc/>
+    public async Task<Message<IDictionary<string, string[]>>> ReadAsync(string id)
+    {
+        var cacheKey = $"{CacheKeyPrefix}-{id}";
+        var json = await distributedCache.GetStringAsync(cacheKey);
 
-            return ObjectSerializer.FromString<Message<IDictionary<string, string[]>>>(json);
-        }
+        return json == null
+                   ? Message.Create((IDictionary<string, string[]>)new Dictionary<string, string[]>())
+                   : ObjectSerializer.FromString<Message<IDictionary<string, string[]>>>(json);
+    }
 
-        /// <inheritdoc/>
-        public Task DeleteAsync(string id)
-        {
-            return _distributedCache.RemoveAsync(id);
-        }
+    /// <inheritdoc/>
+    public Task DeleteAsync(string id)
+    {
+        return distributedCache.RemoveAsync(id);
     }
 }

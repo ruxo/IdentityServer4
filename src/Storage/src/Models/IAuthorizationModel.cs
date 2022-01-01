@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Security.Claims;
+﻿using System.Security.Claims;
 
 namespace IdentityServer4.Models;
 
@@ -11,17 +10,17 @@ public interface IAuthorizationModel
     /// <summary>
     /// Client Identifier
     /// </summary>
-    string? ClientId { get; }
+    string ClientId { get; }
     /// <summary>
     /// Description of this model
     /// </summary>
-    string Description { get; }
+    Option<string> Description { get; }
     /// <summary>
-    /// Gets the subject.
+    /// Gets the subject, which is available only when it is authorized.
     /// </summary>
     ClaimsPrincipal Subject { get; }
     /// <summary>
     /// Requested scopes
     /// </summary>
-    IEnumerable<string> Scopes { get; }
+    string[] Scopes { get; }
 }

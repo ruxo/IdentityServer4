@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.DataProtection;
 using IdentityModel;
 using System.Text;
 using System;
+using LanguageExt;
 using Microsoft.Extensions.Logging;
+using static LanguageExt.Prelude;
 
 namespace IdentityServer4.Stores
 {
@@ -42,26 +44,19 @@ namespace IdentityServer4.Stores
         }
 
         /// <inheritdoc />
-        public virtual Task<Message<TModel>> ReadAsync(string value)
+        public virtual Task<Option<Message<TModel>>> ReadAsync(string value)
         {
-            Message<TModel> result = null;
-
             if (!String.IsNullOrWhiteSpace(value))
-            {
-                try
-                {
+                try {
                     var bytes = Base64Url.Decode(value);
                     bytes = Protector.Unprotect(bytes);
                     var json = Encoding.UTF8.GetString(bytes);
-                    result = ObjectSerializer.FromString<Message<TModel>>(json);
+                    return Task.FromResult(Some(ObjectSerializer.FromString<Message<TModel>>(json)));
                 }
-                catch(Exception ex)
-                {
+                catch (Exception ex) {
                     Logger.LogError(ex, "Exception reading protected message");
                 }
-            }
-
-            return Task.FromResult(result);
+            return Task.FromResult(Option<Message<TModel>>.None);
         }
 
         /// <inheritdoc />

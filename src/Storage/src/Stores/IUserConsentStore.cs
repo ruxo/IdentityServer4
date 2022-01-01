@@ -25,7 +25,7 @@ namespace IdentityServer4.Stores
         /// <param name="subjectId">The subject identifier.</param>
         /// <param name="clientId">The client identifier.</param>
         /// <returns></returns>
-        Task<Consent> GetUserConsentAsync(string subjectId, string clientId);
+        Task<Option<Consent>> GetUserConsentAsync(string subjectId, string clientId);
 
         /// <summary>
         /// Removes the user consent.

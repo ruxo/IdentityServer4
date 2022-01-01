@@ -49,7 +49,7 @@ namespace IdentityServer4.Endpoints
         /// </summary>
         /// <param name="context">The HTTP context.</param>
         /// <returns></returns>
-        public async Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public async Task HandleRequest(HttpContext context)
         {
             if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsPost(context.Request.Method))
             {

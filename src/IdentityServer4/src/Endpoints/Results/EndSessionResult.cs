@@ -12,6 +12,9 @@ using IdentityServer4.Models;
 using IdentityServer4.Stores;
 using IdentityServer4.Extensions;
 using System;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Models.Messages;
+using IdentityServer4.Validation.Models;
 using Microsoft.AspNetCore.Authentication;
 
 namespace IdentityServer4.Endpoints.Results
@@ -75,7 +78,7 @@ namespace IdentityServer4.Endpoints.Results
                 var logoutMessage = new LogoutMessage(validatedRequest);
                 if (logoutMessage.ContainsPayload)
                 {
-                    var msg = new Message<LogoutMessage>(logoutMessage, _clock.UtcNow.UtcDateTime);
+                    var msg = Message.Create(logoutMessage, _clock.UtcNow.UtcDateTime);
                     id = await _logoutMessageStore.WriteAsync(msg);
                 }
             }

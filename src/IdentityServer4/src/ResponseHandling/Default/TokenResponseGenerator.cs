@@ -12,8 +12,11 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using IdentityServer4.Validation.Models;
 using LanguageExt;
 using Microsoft.AspNetCore.Authentication;
+using RZ.Foundation.Extensions;
+using RZ.Foundation.Functional.TaskOption;
 using static LanguageExt.Prelude;
 
 // ReSharper disable once CheckNamespace
@@ -143,13 +146,10 @@ namespace IdentityServer4.ResponseHandling
             // access token
             /////////////////////////
             var (accessToken, refreshToken) = await CreateAccessTokenAsync(request.ValidatedRequest);
-            var response = new TokenResponse
-            {
-                AccessToken = accessToken,
-                AccessTokenLifetime = request.ValidatedRequest.AccessTokenLifetime,
-                Custom = request.CustomResponse,
-                Scope = request.ValidatedRequest.AuthorizationCode.RequestedScopes.ToSpaceSeparatedString()
-            };
+            var response = new TokenResponse(accessToken,
+                                             request.ValidatedRequest.AccessTokenLifetime,
+                                             request.CustomResponse,
+                                             request.ValidatedRequest.AuthorizationCode.RequestedScopes.ToSpaceSeparatedString());
 
             //////////////////////////
             // refresh token
@@ -168,7 +168,7 @@ namespace IdentityServer4.ResponseHandling
                 await GetValidatedClient(request.ValidatedRequest.AuthorizationCode.ClientId!);
 
                 var parsedScopesResult = ScopeParser.ParseScopeValues(request.ValidatedRequest.AuthorizationCode.RequestedScopes);
-                var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
+                var validatedResources = await Resources.FindAllResources(parsedScopesResult);
 
                 var tokenRequest = new TokenCreationRequest
                 {
@@ -207,7 +207,7 @@ namespace IdentityServer4.ResponseHandling
                 // todo: do we want to just parse here and build up validated result
                 // or do we want to fully re-run validation here.
                 var parsedScopesResult = ScopeParser.ParseScopeValues(oldAccessToken.Scopes);
-                var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
+                var validatedResources = await Resources.FindAllResources(parsedScopesResult);
 
                 var creationRequest = new TokenCreationRequest
                 {
@@ -230,9 +230,8 @@ namespace IdentityServer4.ResponseHandling
 
             var handle = await RefreshTokenService.UpdateRefreshTokenAsync(request.ValidatedRequest.RefreshTokenHandle, request.ValidatedRequest.RefreshToken, request.ValidatedRequest.Client);
 
-            return new TokenResponse
-            {
-                IdentityToken = await CreateIdTokenFromRefreshTokenRequestAsync(request.ValidatedRequest, accessTokenString),
+            return new(){
+                IdentityToken = (await CreateIdTokenFromRefreshTokenRequestAsync(request.ValidatedRequest, accessTokenString)).Get(),
                 AccessToken = accessTokenString,
                 AccessTokenLifetime = request.ValidatedRequest.AccessTokenLifetime,
                 RefreshToken = handle,
@@ -279,8 +278,8 @@ namespace IdentityServer4.ResponseHandling
                 await GetValidatedClient(request.ValidatedRequest.DeviceCode.ClientId!);
 
                 var parsedScopesResult = ScopeParser.ParseScopeValues(request.ValidatedRequest.DeviceCode.AuthorizedScopes);
-                var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
-                
+                var validatedResources = await Resources.FindAllResources(parsedScopesResult);
+
                 var tokenRequest = new TokenCreationRequest
                 {
                     Subject = request.ValidatedRequest.DeviceCode.Subject,
@@ -379,7 +378,7 @@ namespace IdentityServer4.ResponseHandling
             await GetValidatedClient(model.ClientId!);
 
             var parsedScopesResult = ScopeParser.ParseScopeValues(model.Scopes);
-            var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
+            var validatedResources = await Resources.FindAllResources(parsedScopesResult);
 
             var tokenRequest = new TokenCreationRequest
             {
@@ -397,18 +396,18 @@ namespace IdentityServer4.ResponseHandling
         /// <param name="request">The request.</param>
         /// <param name="newAccessToken">The new access token.</param>
         /// <returns></returns>
-        protected virtual async OptionAsync<string> CreateIdTokenFromRefreshTokenRequestAsync(ValidatedTokenRequest request, string newAccessToken)
+        protected virtual async Task<Option<string>> CreateIdTokenFromRefreshTokenRequestAsync(ValidatedTokenRequest request, string newAccessToken)
         {
             // todo: can we just check for "openid" scope?
             //var identityResources = await Resources.FindEnabledIdentityResourcesByScopeAsync(request.RefreshToken.Scopes);
             //if (identityResources.Any())
-            
+
             if (request.RefreshToken.Scopes.Contains(OidcConstants.StandardScopes.OpenId))
             {
                 var oldAccessToken = request.RefreshToken.AccessToken;
 
                 var parsedScopesResult = ScopeParser.ParseScopeValues(oldAccessToken.Scopes);
-                var validatedResources = await Resources.CreateResourceValidationResult(parsedScopesResult);
+                var validatedResources = await Resources.FindAllResources(parsedScopesResult);
 
                 var tokenRequest = new TokenCreationRequest
                 {
@@ -422,11 +421,12 @@ namespace IdentityServer4.ResponseHandling
                 return await TokenService.CreateSecurityTokenAsync(idToken);
             }
 
-            return null;
+            return None;
         }
 
         Task<Client> GetValidatedClient(Option<string> clientId) =>
-            clientId.BindAsync(Clients.FindClientByIdAsync)
-                    .IfNone(() => throw new InvalidOperationException("Client does not exist anymore."));
+            Task.FromResult(clientId)
+                .BindAsync(Clients.FindClientByIdAsync)
+                .IfNone(() => throw new InvalidOperationException("Client does not exist anymore."));
     }
 }

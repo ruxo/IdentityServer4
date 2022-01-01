@@ -3,89 +3,38 @@
 
 
 using IdentityModel;
-using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
+using RZ.Foundation.Helpers;
 
-namespace IdentityServer4.Extensions
+namespace IdentityServer4.Extensions;
+
+static class ClaimsExtensions
 {
-    internal static class ClaimsExtensions
-    {
-        public static Dictionary<string, object> ToClaimsDictionary(this IEnumerable<Claim> claims)
-        {
-            var d = new Dictionary<string, object>();
+    public static (Dictionary<string, object[]> Claims, Claim[] Invalid) ToClaimsDictionary(this IEnumerable<Claim> claims) {
+        var d = new Dictionary<string, object[]>();
+        var invalid = new List<Claim>();
 
-            if (claims == null)
-            {
-                return d;
-            }
+        var groupClaims = from c in claims.Distinct(new ClaimComparer())
+                          group c by c.Type into g
+                          select g;
 
-            var distinctClaims = claims.Distinct(new ClaimComparer());
-
-            foreach (var claim in distinctClaims)
-            {
-                if (!d.ContainsKey(claim.Type))
-                {
-                    d.Add(claim.Type, GetValue(claim));
-                }
-                else
-                {
-                    var value = d[claim.Type];
-
-                    if (value is List<object> list)
-                    {
-                        list.Add(GetValue(claim));
-                    }
-                    else
-                    {
-                        d.Remove(claim.Type);
-                        d.Add(claim.Type, new List<object> { value, GetValue(claim) });
-                    }
-                }
-            }
-
-            return d;
+        foreach (var g in groupClaims) {
+            var (validClaims, invalidClaims) = g.Map(claim => (claim, value: GetValue(claim)))
+                                                .Partition(v => v.value.IsSome, v => v.value.Get(), v => v.claim);
+            invalid.AddRange(invalidClaims);
+            d.Add(g.Key, validClaims);
         }
-
-        private static object GetValue(Claim claim)
-        {
-            if (claim.ValueType == ClaimValueTypes.Integer ||
-                claim.ValueType == ClaimValueTypes.Integer32)
-            {
-                if (Int32.TryParse(claim.Value, out int value))
-                {
-                    return value;
-                }
-            }
-
-            if (claim.ValueType == ClaimValueTypes.Integer64)
-            {
-                if (Int64.TryParse(claim.Value, out long value))
-                {
-                    return value;
-                }
-            }
-
-            if (claim.ValueType == ClaimValueTypes.Boolean)
-            {
-                if (bool.TryParse(claim.Value, out bool value))
-                {
-                    return value;
-                }
-            }
-
-            if (claim.ValueType == IdentityServerConstants.ClaimValueTypes.Json)
-            {
-                try
-                {
-                    return System.Text.Json.JsonSerializer.Deserialize<JsonElement>(claim.Value);
-                }
-                catch { }
-            }
-
-            return claim.Value;
-        }
+        return (d, invalid.ToArray());
     }
+
+    static Option<object> GetValue(Claim claim) =>
+        claim.ValueType switch{
+            ClaimValueTypes.Integer or ClaimValueTypes.Integer32 => TryConvert.ToInt32(claim.Value).Map(x => (object)x),
+            ClaimValueTypes.Integer64                            => TryConvert.ToInt64(claim.Value).Map(x => (object)x),
+            ClaimValueTypes.Boolean                              => TryConvert.ToBoolean(claim.Value).Map(x => (object)x),
+            IdentityServerConstants.ClaimValueTypes.Json         => (object)JsonSerializer.Deserialize<JsonElement>(claim.Value),
+            _                                                    => claim.Value
+        };
 }

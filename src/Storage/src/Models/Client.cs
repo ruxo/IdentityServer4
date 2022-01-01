@@ -102,7 +102,7 @@ namespace IdentityServer4.Models
     public class Client
     {
         // setting grant types should be atomic
-        GrantTypeValidatingHashSet _allowedGrantTypes = new();
+        string[] _allowedGrantTypes = System.Array.Empty<string>();
 
         string DebuggerDisplay => ClientId ?? $"{{{typeof(Client)}}}";
 
@@ -127,7 +127,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Client secrets - only relevant for flows that require a secret
         /// </summary>
-        public System.Collections.Generic.HashSet<Secret> ClientSecrets { get; set; } = new ();
+        public Secret[] ClientSecrets { get; set; } = System.Array.Empty<Secret>();
 
         /// <summary>
         /// If set to false, no client secret is needed to request tokens at the token endpoint (defaults to <c>true</c>)
@@ -167,13 +167,13 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies the allowed grant types (legal combinations of AuthorizationCode, Implicit, Hybrid, ResourceOwner, ClientCredentials).
         /// </summary>
-        public GrantTypeValidatingHashSet AllowedGrantTypes
+        public string[] AllowedGrantTypes
         {
             get => _allowedGrantTypes;
             set
             {
                 ValidateGrantTypes(value);
-                _allowedGrantTypes = new(value);
+                _allowedGrantTypes = value;
             }
         }
 
@@ -204,12 +204,12 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies allowed URIs to return tokens or authorization codes to
         /// </summary>
-        public System.Collections.Generic.HashSet<string> RedirectUris { get; set; } = new();
+        public string[] RedirectUris { get; set; } = System.Array.Empty<string>();
 
         /// <summary>
         /// Specifies allowed URIs to redirect to after logout
         /// </summary>
-        public System.Collections.Generic.HashSet<string> PostLogoutRedirectUris { get; set; } = new();
+        public string[] PostLogoutRedirectUris { get; set; } = System.Array.Empty<string>();
 
         /// <summary>
         /// Specifies logout URI at client for HTTP front-channel based logout.
@@ -239,7 +239,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies the api scopes that the client is allowed to request. If empty, the client can't access any scope
         /// </summary>
-        public System.Collections.Generic.HashSet<string> AllowedScopes { get; set; } = new();
+        public string[] AllowedScopes { get; set; } = System.Array.Empty<string>();
 
         /// <summary>
         /// When requesting both an id token and access token, should the user claims always be added to the id token instead of requiring the client to use the userinfo endpoint.
@@ -319,7 +319,7 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Specifies which external IdPs can be used with this client (if list is empty all IdPs are allowed). Defaults to empty.
         /// </summary>
-        public System.Collections.Generic.HashSet<string> IdentityProviderRestrictions { get; set; } = new();
+        public string[] IdentityProviderRestrictions { get; set; } = System.Array.Empty<string>();
 
         /// <summary>
         /// Gets or sets a value indicating whether JWT access tokens should include an identifier. Defaults to <c>true</c>.
@@ -335,7 +335,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The claims.
         /// </value>
-        public System.Collections.Generic.HashSet<ClientClaim> Claims { get; set; } = new();
+        public ClientClaim[] Claims { get; set; } = System.Array.Empty<ClientClaim>();
 
         /// <summary>
         /// Gets or sets a value indicating whether client claims should be always included in the access tokens - or only for client credentials flow.
@@ -357,12 +357,12 @@ namespace IdentityServer4.Models
         /// <summary>
         /// Gets or sets a salt value used in pair-wise subjectId generation for users of this client.
         /// </summary>
-        public string? PairWiseSubjectSalt { get; set; }
+        public Option<string> PairWiseSubjectSalt { get; set; }
 
         /// <summary>
         /// The maximum duration (in seconds) since the last time the user authenticated.
         /// </summary>
-        public int? UserSsoLifetime { get; set; }
+        public Option<int> UserSsoLifetime { get; set; }
 
         /// <summary>
         /// Gets or sets the type of the device flow user code.
@@ -370,7 +370,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The type of the device flow user code.
         /// </value>
-        public string? UserCodeType { get; set; }
+        public Option<string> UserCodeType { get; set; }
 
         /// <summary>
         /// Gets or sets the device code lifetime.
@@ -386,7 +386,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The allowed CORS origins.
         /// </value>
-        public System.Collections.Generic.HashSet<string> AllowedCorsOrigins { get; set; } = new();
+        public string[] AllowedCorsOrigins { get; set; } = System.Array.Empty<string>();
 
         /// <summary>
         /// Gets or sets the custom properties for the client.
@@ -409,9 +409,6 @@ namespace IdentityServer4.Models
         /// </exception>
         public static void ValidateGrantTypes(IEnumerable<string> grantTypes)
         {
-            if (grantTypes == null)
-                throw new ArgumentNullException(nameof(grantTypes));
-
             var gt = Seq(grantTypes);
 
             // spaces are not allowed in grant types

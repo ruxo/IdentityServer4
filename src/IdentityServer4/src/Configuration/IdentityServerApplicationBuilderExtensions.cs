@@ -13,6 +13,8 @@ using System;
 using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Tasks;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Stores.InMemory;
 
 namespace Microsoft.AspNetCore.Builder
 {

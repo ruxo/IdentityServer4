@@ -48,7 +48,7 @@
 
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="6.0.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" Version="1.1.1" />
-    <PackageReference Include="RZ.Foundation" Version="5.0.3" />
+    <PackageReference Include="TiraxTech.Uri" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -13,6 +13,8 @@ using System;
 using IdentityServer4.Extensions;
 using IdentityServer4.Configuration;
 using System.Text.Encodings.Web;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Validation.Models;
 
 namespace IdentityServer4.Endpoints.Results
 {

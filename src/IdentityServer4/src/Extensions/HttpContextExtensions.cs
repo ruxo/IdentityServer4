@@ -11,6 +11,9 @@ using System.Threading.Tasks;
 using IdentityServer4.Models;
 using IdentityServer4.Stores;
 using System.Linq;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Models.Contexts;
+using IdentityServer4.Models.Messages;
 using Microsoft.AspNetCore.Authentication;
 
 #pragma warning disable 1591
@@ -49,7 +52,7 @@ namespace IdentityServer4.Extensions
         {
             var options = context.RequestServices.GetRequiredService<IdentityServerOptions>();
             var request = context.Request;
-            
+
             if (options.MutualTls.Enabled && options.MutualTls.DomainName.IsPresent())
             {
                 if (!options.MutualTls.DomainName.Contains("."))
@@ -61,7 +64,7 @@ namespace IdentityServer4.Extensions
                     }
                 }
             }
-            
+
             return request.Scheme + "://" + request.Host.Value;
         }
 
@@ -93,10 +96,8 @@ namespace IdentityServer4.Extensions
         /// </summary>
         /// <param name="context">The context.</param>
         /// <returns></returns>
-        public static string GetIdentityServerBasePath(this HttpContext context)
-        {
-            return context.Items[Constants.EnvironmentKeys.IdentityServerBasePath] as string;
-        }
+        public static string GetIdentityServerBasePath(this HttpContext context) =>
+            (string) context.Items[Constants.EnvironmentKeys.IdentityServerBasePath]!;
 
         /// <summary>
         /// Gets the public base URL for IdentityServer.
@@ -153,13 +154,13 @@ namespace IdentityServer4.Extensions
             return uri;
         }
 
-        internal static async Task<string> GetIdentityServerSignoutFrameCallbackUrlAsync(this HttpContext context, LogoutMessage logoutMessage = null)
+        internal static async Task<Option<string>> GetIdentityServerSignoutFrameCallbackUrlAsync(this HttpContext context, Option<LogoutMessage> logoutMessage)
         {
             var userSession = context.RequestServices.GetRequiredService<IUserSession>();
             var user = await userSession.GetUserAsync();
-            var currentSubId = user?.GetSubjectId();
+            var currentSubId = user.Get(u => u.GetSubjectId());
 
-            LogoutNotificationContext endSessionMsg = null;
+            // LogoutNotificationContext endSessionMsg = null;
 
             // if we have a logout message, then that take precedence over the current user
             if (logoutMessage?.ClientIds?.Any() == true)
@@ -173,16 +174,11 @@ namespace IdentityServer4.Extensions
                     clientIds = clientIds.Distinct();
                 }
 
-                endSessionMsg = new LogoutNotificationContext
-                {
-                    SubjectId = logoutMessage.SubjectId,
-                    SessionId = logoutMessage.SessionId,
-                    ClientIds = clientIds
-                };
+                endSessionMsg = new (logoutMessage.SubjectId, logoutMessage.SessionId, clientIds);
             }
             else if (currentSubId != null)
             {
-                // see if current user has any clients they need to signout of 
+                // see if current user has any clients they need to signout of
                 var clientIds = await userSession.GetClientListAsync();
                 if (clientIds.Any())
                 {
@@ -198,7 +194,7 @@ namespace IdentityServer4.Extensions
             if (endSessionMsg != null)
             {
                 var clock = context.RequestServices.GetRequiredService<ISystemClock>();
-                var msg = new Message<LogoutNotificationContext>(endSessionMsg, clock.UtcNow.UtcDateTime);
+                var msg = Message.Create(endSessionMsg, clock.UtcNow.UtcDateTime);
 
                 var endSessionMessageStore = context.RequestServices.GetRequiredService<IMessageStore<LogoutNotificationContext>>();
                 var id = await endSessionMessageStore.WriteAsync(msg);

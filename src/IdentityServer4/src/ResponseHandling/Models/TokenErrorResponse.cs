@@ -4,36 +4,20 @@
 
 using IdentityModel;
 using System.Collections.Generic;
+using IdentityServer4.Validation.Models;
 
-namespace IdentityServer4.ResponseHandling
+// ReSharper disable once CheckNamespace
+namespace IdentityServer4.ResponseHandling;
+
+/// <summary>
+/// Models a token error response
+/// </summary>
+public sealed record TokenErrorResponse(Dictionary<string, object> Custom) : ErrorInfo
 {
     /// <summary>
-    /// Models a token error response
+    /// Initialize empty
     /// </summary>
-    public class TokenErrorResponse
-    {
-        /// <summary>
-        /// Gets or sets the error.
-        /// </summary>
-        /// <value>
-        /// The error.
-        /// </value>
-        public string Error { get; set; } = OidcConstants.TokenErrors.InvalidRequest;
-
-        /// <summary>
-        /// Gets or sets the error description.
-        /// </summary>
-        /// <value>
-        /// The error description.
-        /// </value>
-        public string ErrorDescription { get; set; }
-
-        /// <summary>
-        /// Gets or sets the custom entries.
-        /// </summary>
-        /// <value>
-        /// The custom.
-        /// </value>
-        public Dictionary<string, object> Custom { get; set; } = new Dictionary<string, object>();
+    public TokenErrorResponse(string error, string? errorDescription = null, Dictionary<string, object>? custom = null) : this(custom ?? new Dictionary<string, object>()) {
+        ErrorDescription = errorDescription ?? "-- no message --";
     }
 }

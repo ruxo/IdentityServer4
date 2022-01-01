@@ -2,63 +2,50 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Models;
-using System.Collections.Generic;
 using System.Security.Claims;
+using IdentityServer4.Models;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Models;
+
+/// <summary>
+/// Models the validation result of access tokens and id tokens.
+/// </summary>
+public interface TokenValidationResult
 {
     /// <summary>
-    /// Models the validation result of access tokens and id tokens.
+    /// Original token
     /// </summary>
-    public class TokenValidationResult : ValidationResult
-    {
-        /// <summary>
-        /// Gets or sets the claims.
-        /// </summary>
-        /// <value>
-        /// The claims.
-        /// </value>
-        public IEnumerable<Claim> Claims { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the JWT.
-        /// </summary>
-        /// <value>
-        /// The JWT.
-        /// </value>
-        public string Jwt { get; set; }
+    string Token { get; }
+    /// <summary>
+    ///
+    /// </summary>
+    Client Client { get; }
 
-        /// <summary>
-        /// Gets or sets the reference token (in case of access token validation).
-        /// </summary>
-        /// <value>
-        /// The reference token.
-        /// </value>
-        public Token ReferenceToken { get; set; }
-
-        /// <summary>
-        /// Gets or sets the reference token identifier (in case of access token validation).
-        /// </summary>
-        /// <value>
-        /// The reference token identifier.
-        /// </value>
-        public string ReferenceTokenId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the refresh token (in case of refresh token validation).
-        /// </summary>
-        /// <value>
-        /// The reference token identifier.
-        /// </value>
-        public RefreshToken RefreshToken { get; set; }
-
-        /// <summary>
-        /// Gets or sets the client.
-        /// </summary>
-        /// <value>
-        /// The client.
-        /// </value>
-        public Client Client { get; set; }
-    }
+    /// <summary>
+    ///
+    /// </summary>
+    Claim[] Claims { get; }
 }
+
+/// <summary>
+/// Validated access token result.
+/// </summary>
+/// <param name="Client"></param>
+/// <param name="Claims"></param>
+public abstract record ValidatedAccessToken(string Token, Client Client, Claim[] Claims) : TokenValidationResult;
+
+/// <summary>
+///
+/// </summary>
+/// <param name="Client"></param>
+/// <param name="Claims"></param>
+public sealed record ValidatedJwtAccessToken(string Token, Client Client, Claim[] Claims, string Jwt) : TokenValidationResult;
+
+/// <summary>
+///
+/// </summary>
+/// <param name="Client"></param>
+/// <param name="Claims"></param>
+/// <param name="ReferenceTokenId">the reference token identifier (in case of access token validation).</param>
+/// <param name="ReferenceToken">the refresh token (in case of refresh token validation).</param>
+public sealed record ValidatedReferenceAccessToken(string Token, Client Client, Claim[] Claims, Token ReferenceToken, string ReferenceTokenId) : TokenValidationResult;

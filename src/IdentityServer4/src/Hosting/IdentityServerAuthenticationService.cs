@@ -14,6 +14,7 @@ using System;
 using IdentityModel;
 using System.Linq;
 using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 
 namespace IdentityServer4.Hosting
 {

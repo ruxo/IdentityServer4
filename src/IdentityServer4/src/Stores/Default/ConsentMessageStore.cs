@@ -4,33 +4,31 @@
 
 using IdentityServer4.Models;
 using System.Threading.Tasks;
+using LanguageExt;
 
-namespace IdentityServer4.Stores
+// ReSharper disable once CheckNamespace
+namespace IdentityServer4.Stores;
+
+class ConsentMessageStore : IConsentMessageStore
 {
-    internal class ConsentMessageStore : IConsentMessageStore
+    protected readonly MessageCookie<ConsentResponse> Cookie;
+
+    public ConsentMessageStore(MessageCookie<ConsentResponse> cookie)
     {
-        protected readonly MessageCookie<ConsentResponse> Cookie;
+        Cookie = cookie;
+    }
 
-        public ConsentMessageStore(MessageCookie<ConsentResponse> cookie)
-        {
-            Cookie = cookie;
-        }
+    public virtual Task DeleteAsync(string id)
+    {
+        Cookie.Clear(id);
+        return Task.CompletedTask;
+    }
 
-        public virtual Task DeleteAsync(string id)
-        {
-            Cookie.Clear(id);
-            return Task.CompletedTask;
-        }
+    public virtual Task<Option<Message<ConsentResponse>>> ReadAsync(string id) => Task.FromResult(Cookie.Read(id));
 
-        public virtual Task<Message<ConsentResponse>> ReadAsync(string id)
-        {
-            return Task.FromResult(Cookie.Read(id));
-        }
-
-        public virtual Task WriteAsync(string id, Message<ConsentResponse> message)
-        {
-            Cookie.Write(id, message);
-            return Task.CompletedTask;
-        }
+    public virtual Task WriteAsync(string id, Message<ConsentResponse> message)
+    {
+        Cookie.Write(id, message);
+        return Task.CompletedTask;
     }
 }

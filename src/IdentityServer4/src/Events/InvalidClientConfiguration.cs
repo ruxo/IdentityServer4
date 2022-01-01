@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using IdentityServer4.Events.Infrastructure;
 using IdentityServer4.Models;
 
 namespace IdentityServer4.Events
@@ -9,7 +10,7 @@ namespace IdentityServer4.Events
     /// <summary>
     /// Event for unhandled exceptions
     /// </summary>
-    /// <seealso cref="IdentityServer4.Events.Event" />
+    /// <seealso cref="Event" />
     public class InvalidClientConfigurationEvent : Event
     {
         /// <summary>

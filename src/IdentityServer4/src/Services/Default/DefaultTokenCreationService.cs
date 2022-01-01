@@ -3,7 +3,6 @@
 
 
 using IdentityModel;
-using IdentityServer4.Configuration;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using Microsoft.AspNetCore.Authentication;
@@ -12,7 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
-using System.Threading.Tasks;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using static IdentityServer4.IdentityServerConstants;
 
 namespace IdentityServer4.Services

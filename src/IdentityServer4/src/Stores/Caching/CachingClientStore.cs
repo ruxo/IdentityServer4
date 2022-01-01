@@ -2,10 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System.Threading.Tasks;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
 using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using LanguageExt;
 using Microsoft.Extensions.Logging;
 
@@ -47,7 +49,7 @@ namespace IdentityServer4.Stores
         /// <returns>
         /// The client
         /// </returns>
-        public OptionAsync<Client> FindClientByIdAsync(string clientId) =>
+        public Task<Option<Client>> FindClientByIdAsync(string clientId) =>
             _cache.GetAsync(clientId,
                 _options.Caching.ClientStoreExpiration,
                 async () => await _inner.FindClientByIdAsync(clientId),

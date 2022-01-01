@@ -2,83 +2,64 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Models;
-using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
+using IdentityServer4.Models;
+using IdentityServer4.Validation.Models;
+using Microsoft.Extensions.Logging;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Default;
+
+/// <summary>
+/// Validates an extension grant request using the registered validators
+/// </summary>
+public class ExtensionGrantValidator
 {
+    readonly ILogger logger;
+    readonly IExtensionGrantValidator[] validators;
+
     /// <summary>
-    /// Validates an extension grant request using the registered validators
+    /// Initializes a new instance of the <see cref="ExtensionGrantValidator"/> class.
     /// </summary>
-    public class ExtensionGrantValidator
+    /// <param name="validators">The validators.</param>
+    /// <param name="logger">The logger.</param>
+    public ExtensionGrantValidator(IEnumerable<IExtensionGrantValidator> validators, ILogger<ExtensionGrantValidator> logger)
     {
-        private readonly ILogger _logger;
-        private readonly IEnumerable<IExtensionGrantValidator> _validators;
+        this.validators = validators.AsArray();
+        this.logger = logger;
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ExtensionGrantValidator"/> class.
-        /// </summary>
-        /// <param name="validators">The validators.</param>
-        /// <param name="logger">The logger.</param>
-        public ExtensionGrantValidator(IEnumerable<IExtensionGrantValidator> validators, ILogger<ExtensionGrantValidator> logger)
+    /// <summary>
+    /// Gets the available grant types.
+    /// </summary>
+    /// <returns></returns>
+    public IEnumerable<string> GetAvailableGrantTypes() => validators.Select(v => v.GrantType);
+
+    /// <summary>
+    /// Validates the request.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <returns></returns>
+    public async Task<Either<GrantValidationError, GrantValidationResult>> ValidateAsync(ValidatedTokenRequest request)
+    {
+        var validator = validators.FirstOrDefault(v => v.GrantType.Equals(request.GrantType, StringComparison.Ordinal));
+
+        if (validator == null)
         {
-            if (validators == null)
-            {
-                _validators = Enumerable.Empty<IExtensionGrantValidator>();
-            }
-            else
-            {
-                _validators = validators;
-            }
-
-            _logger = logger;
+            logger.LogError("No validator found for grant type");
+            return GrantValidationError.Create(TokenRequestErrors.UnsupportedGrantType);
         }
 
-        /// <summary>
-        /// Gets the available grant types.
-        /// </summary>
-        /// <returns></returns>
-        public IEnumerable<string> GetAvailableGrantTypes()
+        try
         {
-            return _validators.Select(v => v.GrantType);
+            logger.LogTrace("Calling into custom grant validator: {Type}", validator.GetType().FullName);
+
+            return await validator.ValidateAsync(request);
         }
-
-        /// <summary>
-        /// Validates the request.
-        /// </summary>
-        /// <param name="request">The request.</param>
-        /// <returns></returns>
-        public async Task<GrantValidationResult> ValidateAsync(ValidatedTokenRequest request)
+        catch (Exception e)
         {
-            var validator = _validators.FirstOrDefault(v => v.GrantType.Equals(request.GrantType, StringComparison.Ordinal));
-
-            if (validator == null)
-            {
-                _logger.LogError("No validator found for grant type");
-                return new GrantValidationResult(TokenRequestErrors.UnsupportedGrantType);
-            }
-
-            try
-            {
-                _logger.LogTrace("Calling into custom grant validator: {type}", validator.GetType().FullName);
-
-                var context = new ExtensionGrantValidationContext
-                {
-                    Request = request
-                };
-            
-                await validator.ValidateAsync(context);
-                return context.Result;
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(1, e, "Grant validation error: {message}", e.Message);
-                return new GrantValidationResult(TokenRequestErrors.InvalidGrant);
-            }
+            logger.LogError(1, e, "Grant validation error: {Message}", e.Message);
+            return GrantValidationError.Create(TokenRequestErrors.InvalidGrant);
         }
     }
 }

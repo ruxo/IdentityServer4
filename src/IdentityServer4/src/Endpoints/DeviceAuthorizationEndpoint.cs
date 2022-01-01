@@ -2,8 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using IdentityModel;
 using IdentityServer4.Endpoints.Results;
 using IdentityServer4.Events;
@@ -21,13 +19,13 @@ namespace IdentityServer4.Endpoints
     /// The device authorization endpoint
     /// </summary>
     /// <seealso cref="IdentityServer4.Hosting.IEndpointHandler" />
-    internal class DeviceAuthorizationEndpoint : IEndpointHandler
+    class DeviceAuthorizationEndpoint : IEndpointHandler
     {
-        private readonly IClientSecretValidator _clientValidator;
-        private readonly IDeviceAuthorizationRequestValidator _requestValidator;
-        private readonly IDeviceAuthorizationResponseGenerator _responseGenerator;
-        private readonly IEventService _events;
-        private readonly ILogger<DeviceAuthorizationEndpoint> _logger;
+        readonly IClientSecretValidator _clientValidator;
+        readonly IDeviceAuthorizationRequestValidator _requestValidator;
+        readonly IDeviceAuthorizationResponseGenerator _responseGenerator;
+        readonly IEventService _events;
+        readonly ILogger<DeviceAuthorizationEndpoint> _logger;
 
         public DeviceAuthorizationEndpoint(
             IClientSecretValidator clientValidator,
@@ -49,9 +47,9 @@ namespace IdentityServer4.Endpoints
         /// <param name="context">The HTTP context.</param>
         /// <returns></returns>
         /// <exception cref="System.NotImplementedException"></exception>
-        public async Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public async Task HandleRequest(HttpContext context)
         {
-            _logger.LogTrace("Processing device authorize request.");
+            _logger.LogTrace("Processing device authorize request");
 
             // validate HTTP
             if (!HttpMethods.IsPost(context.Request.Method) || !context.Request.HasApplicationFormContentType())
@@ -63,71 +61,39 @@ namespace IdentityServer4.Endpoints
             return await ProcessDeviceAuthorizationRequestAsync(context);
         }
 
-        private async Task<IEndpointResult> ProcessDeviceAuthorizationRequestAsync(HttpContext context)
+        async Task<IEndpointResult> ProcessDeviceAuthorizationRequestAsync(HttpContext context)
         {
-            _logger.LogDebug("Start device authorize request.");
+            _logger.LogDebug("Start device authorize request");
 
-            // validate client
-            var clientResult = await _clientValidator.ValidateAsync(context);
-            if (clientResult.Client == null) return Error(OidcConstants.TokenErrors.InvalidClient);
+            var cr = await _clientValidator.ValidateAsync(context);
+            if (cr.IsLeft) return Error(OidcConstants.TokenErrors.InvalidClient);
+            var clientResult = cr.GetRight();
 
-            // validate request
-            var form = (await context.Request.ReadFormAsync()).AsNameValueCollection();
-            var requestResult = await _requestValidator.ValidateAsync(form, clientResult);
+            var form = (await context.Request.ReadFormAsync()).ToNameValueDictionary();
+            var request = await _requestValidator.ValidateAsync(form, clientResult);
 
-            if (requestResult.IsError)
-            {
-                await _events.RaiseAsync(new DeviceAuthorizationFailureEvent(requestResult));
-                return Error(requestResult.Error, requestResult.ErrorDescription);
+            if (request.IsLeft) {
+                var error = request.GetLeft();
+                await _events.RaiseAsync(DeviceAuthorizationFailureEvent.Create(error));
+                return Error(error.Error, error.ErrorDescription);
             }
 
             var baseUrl = context.GetIdentityServerBaseUrl().EnsureTrailingSlash();
 
-            // create response
-            _logger.LogTrace("Calling into device authorize response generator: {type}", _responseGenerator.GetType().FullName);
+            _logger.LogTrace("Calling into device authorize response generator: {Type}", _responseGenerator.GetType().FullName);
+            var requestResult = request.GetRight();
             var response = await _responseGenerator.ProcessAsync(requestResult, baseUrl);
 
-            await _events.RaiseAsync(new DeviceAuthorizationSuccessEvent(response, requestResult));
+            await _events.RaiseAsync(DeviceAuthorizationSuccessEvent.Create(requestResult));
 
-            // return result
-            _logger.LogDebug("Device authorize request success.");
+            _logger.LogDebug("Device authorize request success");
             return new DeviceAuthorizationResult(response);
         }
 
-        private TokenErrorResult Error(string error, string errorDescription = null, Dictionary<string, object> custom = null)
-        {
-            var response = new TokenErrorResponse
-            {
-                Error = error,
-                ErrorDescription = errorDescription,
-                Custom = custom
-            };
+        TokenErrorResult Error(string error, string? errorDescription = null, Dictionary<string, object>? custom = null) {
+            _logger.LogError("Device authorization error: {Error}:{ErrorDescriptions}", error, errorDescription ?? "-no message-");
 
-            _logger.LogError("Device authorization error: {error}:{errorDescriptions}", error, error ?? "-no message-");
-
-            return new TokenErrorResult(response);
-        }
-
-        private void LogResponse(DeviceAuthorizationResponse response, DeviceAuthorizationRequestValidationResult requestResult)
-        {
-            var clientId = $"{requestResult.ValidatedRequest.Client.ClientId} ({requestResult.ValidatedRequest.Client?.ClientName ?? "no name set"})";
-
-            if (response.DeviceCode != null)
-            {
-                _logger.LogTrace("Device code issued for {clientId}: {deviceCode}", clientId, response.DeviceCode);
-            }
-            if (response.UserCode != null)
-            {
-                _logger.LogTrace("User code issued for {clientId}: {userCode}", clientId, response.UserCode);
-            }
-            if (response.VerificationUri != null)
-            {
-                _logger.LogTrace("Verification URI issued for {clientId}: {verificationUri}", clientId, response.VerificationUri);
-            }
-            if (response.VerificationUriComplete != null)
-            {
-                _logger.LogTrace("Verification URI (Complete) issued for {clientId}: {verificationUriComplete}", clientId, response.VerificationUriComplete);
-            }
+            return new(new(error, errorDescription, custom));
         }
     }
 }

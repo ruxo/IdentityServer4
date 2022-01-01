@@ -40,7 +40,7 @@ namespace IdentityServer4.Validation
         /// or
         /// client
         /// </exception>
-        public Task<TokenRevocationRequestValidationResult> ValidateRequestAsync(NameValueCollection parameters, Client client)
+        public Task<TokenRevocationRequestValidationResult> ValidateRequestAsync(Dictionary<string,string> parameters, Client client)
         {
             _logger.LogTrace("ValidateRequestAsync called");
 

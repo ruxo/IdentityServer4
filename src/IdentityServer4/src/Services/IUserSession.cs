@@ -1,8 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authentication;
-using System.Collections.Generic;
 using System.Security.Claims;
-using System.Threading.Tasks;
-using LanguageExt;
 
 namespace IdentityServer4.Services
 {
@@ -19,13 +16,13 @@ namespace IdentityServer4.Services
         /// <summary>
         /// Gets the current authenticated user.
         /// </summary>
-        OptionAsync<ClaimsPrincipal> GetUserAsync();
+        Task<Option<ClaimsPrincipal>> GetUserAsync();
 
         /// <summary>
         /// Gets the current session identifier.
         /// </summary>
         /// <returns></returns>
-        Task<string> GetSessionIdAsync();
+        Task<Option<string>> GetSessionIdAsync();
 
         /// <summary>
         /// Ensures the session identifier cookie asynchronous.

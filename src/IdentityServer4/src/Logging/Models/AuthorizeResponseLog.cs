@@ -4,6 +4,7 @@
 
 using IdentityServer4.Extensions;
 using IdentityServer4.ResponseHandling;
+using IdentityServer4.ResponseHandling.Models;
 
 namespace IdentityServer4.Logging.Models
 {

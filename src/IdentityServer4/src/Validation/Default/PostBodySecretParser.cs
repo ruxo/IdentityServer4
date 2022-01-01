@@ -9,101 +9,92 @@ using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using System.Linq;
 using IdentityModel;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using Microsoft.AspNetCore.Http;
 
-namespace IdentityServer4.Validation
+// ReSharper disable once CheckNamespace
+namespace IdentityServer4.Validation;
+
+/// <summary>
+/// Parses a POST body for secrets
+/// </summary>
+public class PostBodySecretParser : ISecretParser
 {
+    readonly ILogger logger;
+    readonly IdentityServerOptions options;
+
     /// <summary>
-    /// Parses a POST body for secrets
+    /// Creates the parser with options
     /// </summary>
-    public class PostBodySecretParser : ISecretParser
+    /// <param name="options">IdentityServer options</param>
+    /// <param name="logger">Logger</param>
+    public PostBodySecretParser(IdentityServerOptions options, ILogger<PostBodySecretParser> logger)
     {
-        private readonly ILogger _logger;
-        private readonly IdentityServerOptions _options;
+        this.logger  = logger;
+        this.options = options;
+    }
 
-        /// <summary>
-        /// Creates the parser with options
-        /// </summary>
-        /// <param name="options">IdentityServer options</param>
-        /// <param name="logger">Logger</param>
-        public PostBodySecretParser(IdentityServerOptions options, ILogger<PostBodySecretParser> logger)
+    /// <summary>
+    /// Returns the authentication method name that this parser implements
+    /// </summary>
+    /// <value>
+    /// The authentication method.
+    /// </value>
+    public string AuthenticationMethod => OidcConstants.EndpointAuthenticationMethods.PostBody;
+
+    /// <summary>
+    /// Tries to find a secret on the context that can be used for authentication
+    /// </summary>
+    /// <param name="context">The HTTP context.</param>
+    /// <returns>
+    /// A parsed secret
+    /// </returns>
+    public async Task<Option<ParsedSecret>> ParseAsync(HttpContext context)
+    {
+        logger.LogDebug("Start parsing for secret in post body");
+
+        if (!context.Request.HasApplicationFormContentType())
         {
-            _logger = logger;
-            _options = options;
+            logger.LogDebug("Content type is not a form");
+            return None;
         }
 
-        /// <summary>
-        /// Returns the authentication method name that this parser implements
-        /// </summary>
-        /// <value>
-        /// The authentication method.
-        /// </value>
-        public string AuthenticationMethod => OidcConstants.EndpointAuthenticationMethods.PostBody;
+        var body = await context.Request.ReadFormAsync();
 
-        /// <summary>
-        /// Tries to find a secret on the context that can be used for authentication
-        /// </summary>
-        /// <param name="context">The HTTP context.</param>
-        /// <returns>
-        /// A parsed secret
-        /// </returns>
-        public async Task<ParsedSecret> ParseAsync(HttpContext context)
-        {
-            _logger.LogDebug("Start parsing for secret in post body");
+        var id = body["client_id"].FirstOrDefault();
+        var secret = body["client_secret"].FirstOrDefault();
 
-            if (!context.Request.HasApplicationFormContentType())
-            {
-                _logger.LogDebug("Content type is not a form");
-                return null;
+        // client id must be present
+        if (id.IsPresent()) {
+            if (id!.Length > options.InputLengthRestrictions.ClientId) {
+                logger.LogError("Client ID exceeds maximum length");
+                return None;
             }
 
-            var body = await context.Request.ReadFormAsync();
-
-            if (body != null)
-            {
-                var id = body["client_id"].FirstOrDefault();
-                var secret = body["client_secret"].FirstOrDefault();
-
-                // client id must be present
-                if (id.IsPresent())
-                {
-                    if (id.Length > _options.InputLengthRestrictions.ClientId)
-                    {
-                        _logger.LogError("Client ID exceeds maximum length.");
-                        return null;
-                    }
-
-                    if (secret.IsPresent())
-                    {
-                        if (secret.Length > _options.InputLengthRestrictions.ClientSecret)
-                        {
-                            _logger.LogError("Client secret exceeds maximum length.");
-                            return null;
-                        }
-
-                        return new ParsedSecret
-                        {
-                            Id = id,
-                            Credential = secret,
-                            Type = IdentityServerConstants.ParsedSecretTypes.SharedSecret
-                        };
-                    }
-                    else
-                    {
-                        // client secret is optional
-                        _logger.LogDebug("client id without secret found");
-
-                        return new ParsedSecret
-                        {
-                            Id = id,
-                            Type = IdentityServerConstants.ParsedSecretTypes.NoSecret
-                        };
-                    }
+            if (secret.IsPresent()) {
+                if (secret!.Length > options.InputLengthRestrictions.ClientSecret) {
+                    logger.LogError("Client secret exceeds maximum length");
+                    return None;
                 }
-            }
 
-            _logger.LogDebug("No secret in post body found");
-            return null;
+                return new ParsedSecret{
+                    Id         = id,
+                    Credential = secret,
+                    Type       = IdentityServerConstants.ParsedSecretTypes.SharedSecret
+                };
+            }
+            else {
+                // client secret is optional
+                logger.LogDebug("client id without secret found");
+
+                return new ParsedSecret{
+                    Id   = id,
+                    Type = IdentityServerConstants.ParsedSecretTypes.NoSecret
+                };
+            }
         }
+
+        logger.LogDebug("No secret in post body found");
+        return None;
     }
 }

@@ -6,6 +6,7 @@ using IdentityServer4.Extensions;
 using IdentityServer4.Services;
 using System.Threading.Tasks;
 using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using Microsoft.Extensions.Logging;
 
 namespace IdentityServer4.Stores

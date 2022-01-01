@@ -4,6 +4,7 @@
 using System.Net;
 using System.Threading.Tasks;
 using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Endpoints.Results;
 using IdentityServer4.Extensions;
 using IdentityServer4.Hosting;
@@ -31,7 +32,7 @@ namespace IdentityServer4.Endpoints
             _responseGenerator = responseGenerator;
         }
 
-        public async Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public async Task HandleRequest(HttpContext context)
         {
             _logger.LogTrace("Processing discovery request.");
 

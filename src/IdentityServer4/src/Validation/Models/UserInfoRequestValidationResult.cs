@@ -3,6 +3,7 @@
 
 
 using System.Security.Claims;
+using IdentityServer4.Validation.Models;
 
 namespace IdentityServer4.Validation
 {

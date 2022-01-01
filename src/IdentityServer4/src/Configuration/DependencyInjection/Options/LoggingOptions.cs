@@ -2,36 +2,26 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Collections.Generic;
 using IdentityModel;
 
-namespace IdentityServer4.Configuration
+namespace IdentityServer4.Configuration.DependencyInjection.Options;
+
+/// <summary>
+/// Options for configuring logging behavior
+/// </summary>
+public sealed record LoggingOptions(string[] TokenRequestSensitiveValuesFilter, string[] AuthorizeRequestSensitiveValuesFilter)
 {
     /// <summary>
-    /// Options for configuring logging behavior
+    /// Default logging options
     /// </summary>
-    public class LoggingOptions
-    {
-        /// <summary>
-        /// 
-        /// </summary>
-        public ICollection<string> TokenRequestSensitiveValuesFilter { get; set; } = 
-            new HashSet<string>
-            {
-                OidcConstants.TokenRequest.ClientSecret,
-                OidcConstants.TokenRequest.Password,
-                OidcConstants.TokenRequest.ClientAssertion,
-                OidcConstants.TokenRequest.RefreshToken,
-                OidcConstants.TokenRequest.DeviceCode
-            };
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public ICollection<string> AuthorizeRequestSensitiveValuesFilter { get; set; } = 
-            new HashSet<string>
-            {
-                OidcConstants.AuthorizeRequest.IdTokenHint
-            };
-    }
+    public static readonly LoggingOptions Default = new(new[]{
+                                                            OidcConstants.TokenRequest.ClientSecret,
+                                                            OidcConstants.TokenRequest.Password,
+                                                            OidcConstants.TokenRequest.ClientAssertion,
+                                                            OidcConstants.TokenRequest.RefreshToken,
+                                                            OidcConstants.TokenRequest.DeviceCode
+                                                        },
+                                                        new[]{
+                                                            OidcConstants.AuthorizeRequest.IdTokenHint
+                                                        });
 }

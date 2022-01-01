@@ -32,16 +32,16 @@ namespace IdentityServer4.Endpoints
             _logger = logger;
         }
 
-        public async Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public async Task HandleRequest(HttpContext context)
         {
-            NameValueCollection parameters;
+            Dictionary<string,string> parameters;
             if (HttpMethods.IsGet(context.Request.Method))
             {
-                parameters = context.Request.Query.AsNameValueCollection();
+                parameters = context.Request.Query.ToNameValueDictionary();
             }
             else if (HttpMethods.IsPost(context.Request.Method))
             {
-                parameters = (await context.Request.ReadFormAsync()).AsNameValueCollection();
+                parameters = (await context.Request.ReadFormAsync()).ToNameValueDictionary();
             }
             else
             {

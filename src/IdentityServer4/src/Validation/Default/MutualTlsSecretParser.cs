@@ -5,86 +5,82 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
+using LanguageExt;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using static LanguageExt.Prelude;
 
-namespace IdentityServer4.Validation
+// ReSharper disable once CheckNamespace
+namespace IdentityServer4.Validation;
+
+/// <summary>
+/// Parses secret according to MTLS spec
+/// </summary>
+public class MutualTlsSecretParser : ISecretParser
 {
+    readonly IdentityServerOptions options;
+    readonly ILogger<MutualTlsSecretParser> logger;
+
     /// <summary>
-    /// Parses secret according to MTLS spec
+    /// ctor
     /// </summary>
-    public class MutualTlsSecretParser : ISecretParser
+    /// <param name="options"></param>
+    /// <param name="logger"></param>
+    public MutualTlsSecretParser(IdentityServerOptions options, ILogger<MutualTlsSecretParser> logger)
     {
-        private readonly IdentityServerOptions _options;
-        private readonly ILogger<MutualTlsSecretParser> _logger;
+        this.options = options;
+        this.logger  = logger;
+    }
 
-        /// <summary>
-        /// ctor
-        /// </summary>
-        /// <param name="options"></param>
-        /// <param name="logger"></param>
-        public MutualTlsSecretParser(IdentityServerOptions options, ILogger<MutualTlsSecretParser> logger)
+    /// <summary>
+    /// Name of authentication method (blank to suppress in discovery since we do special handling)
+    /// </summary>
+    public string AuthenticationMethod => String.Empty;
+
+    /// <summary>
+    /// Parses the HTTP context
+    /// </summary>
+    /// <param name="context"></param>
+    /// <returns></returns>
+    public async Task<Option<ParsedSecret>> ParseAsync(HttpContext context)
+    {
+        logger.LogDebug("Start parsing for client id in post body");
+
+        if (!context.Request.HasApplicationFormContentType())
         {
-            _options = options;
-            _logger = logger;
+            logger.LogDebug("Content type is not a form");
+            return None;
         }
 
-        /// <summary>
-        /// Name of authentication method (blank to suppress in discovery since we do special handling)
-        /// </summary>
-        public string AuthenticationMethod => String.Empty;
+        var body = await context.Request.ReadFormAsync();
 
-        /// <summary>
-        /// Parses the HTTP context
-        /// </summary>
-        /// <param name="context"></param>
-        /// <returns></returns>
-        public async Task<ParsedSecret> ParseAsync(HttpContext context)
-        {
-            _logger.LogDebug("Start parsing for client id in post body");
+        var id = body["client_id"].FirstOrDefault();
 
-            if (!context.Request.HasApplicationFormContentType())
-            {
-                _logger.LogDebug("Content type is not a form");
-                return null;
+        // client id must be present
+        if (!String.IsNullOrWhiteSpace(id)) {
+            if (id.Length > options.InputLengthRestrictions.ClientId) {
+                logger.LogError("Client ID exceeds maximum length");
+                return None;
             }
 
-            var body = await context.Request.ReadFormAsync();
+            var clientCertificate = await context.Connection.GetClientCertificateAsync();
 
-            if (body != null)
-            {
-                var id = body["client_id"].FirstOrDefault();
-
-                // client id must be present
-                if (!String.IsNullOrWhiteSpace(id))
-                {
-                    if (id.Length > _options.InputLengthRestrictions.ClientId)
-                    {
-                        _logger.LogError("Client ID exceeds maximum length.");
-                        return null;
-                    }
-                    
-                    var clientCertificate = await context.Connection.GetClientCertificateAsync();
-                    
-                    if (clientCertificate is null)
-                    {
-                        _logger.LogDebug("Client certificate not present");
-                        return null;
-                    }
-                    
-                    return new ParsedSecret
-                    {
-                        Id = id,
-                        Credential = clientCertificate,
-                        Type = IdentityServerConstants.ParsedSecretTypes.X509Certificate
-                    };
-                }
+            if (clientCertificate is null) {
+                logger.LogDebug("Client certificate not present");
+                return None;
             }
 
-            _logger.LogDebug("No post body found");
-            return null;
+            return new ParsedSecret{
+                Id         = id,
+                Credential = clientCertificate,
+                Type       = IdentityServerConstants.ParsedSecretTypes.X509Certificate
+            };
         }
+
+        logger.LogDebug("No post body found");
+        return None;
     }
 }

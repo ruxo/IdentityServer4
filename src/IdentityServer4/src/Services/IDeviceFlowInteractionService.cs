@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Threading.Tasks;
 using IdentityServer4.Models;
-using LanguageExt;
 
 namespace IdentityServer4.Services
 {
@@ -18,7 +16,7 @@ namespace IdentityServer4.Services
         /// </summary>
         /// <param name="userCode">The user code.</param>
         /// <returns></returns>
-        OptionAsync<DeviceFlowAuthorizationRequest> GetAuthorizationContextAsync(string userCode);
+        Task<Option<DeviceFlowAuthorizationRequest>> GetAuthorizationContextAsync(string userCode);
 
         /// <summary>
         /// Handles the request asynchronous.

@@ -5,32 +5,23 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace IdentityServer4.Logging
+namespace IdentityServer4.Logging;
+
+/// <summary>
+/// Helper to JSON serialize object data for logging.
+/// </summary>
+static class LogSerializer
 {
+    static readonly JsonSerializerOptions Options = new(){
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented          = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     /// <summary>
-    /// Helper to JSON serialize object data for logging.
+    /// Serializes the specified object.
     /// </summary>
-    internal static class LogSerializer
-    {
-        static readonly JsonSerializerOptions Options = new JsonSerializerOptions
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = true
-        };
-
-        static LogSerializer()
-        {
-            Options.Converters.Add(new JsonStringEnumConverter());
-        }
-
-        /// <summary>
-        /// Serializes the specified object.
-        /// </summary>
-        /// <param name="logObject">The object.</param>
-        /// <returns></returns>
-        public static string Serialize(object logObject)
-        {
-            return JsonSerializer.Serialize(logObject, Options);
-        }
-    }
+    /// <param name="logObject">The object.</param>
+    /// <returns></returns>
+    public static string Serialize(object logObject) => JsonSerializer.Serialize(logObject, Options);
 }

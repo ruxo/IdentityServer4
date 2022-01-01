@@ -3,120 +3,101 @@
 
 
 using System.Linq;
-using System.Threading.Tasks;
 using IdentityModel;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
+using IdentityServer4.Validation.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 
-namespace IdentityServer4.Validation
+// ReSharper disable once CheckNamespace
+namespace IdentityServer4.Validation;
+
+/// <summary>
+/// Validates an incoming token request using the device flow
+/// </summary>
+class DeviceCodeValidator : IDeviceCodeValidator
 {
+    readonly IDeviceFlowCodeService _devices;
+    readonly IProfileService _profile;
+    readonly IDeviceFlowThrottlingService _throttlingService;
+    readonly ISystemClock _systemClock;
+    readonly ILogger<DeviceCodeValidator> _logger;
+
     /// <summary>
-    /// Validates an incoming token request using the device flow
+    /// Initializes a new instance of the <see cref="DeviceCodeValidator"/> class.
     /// </summary>
-    internal class DeviceCodeValidator : IDeviceCodeValidator
+    /// <param name="devices">The devices.</param>
+    /// <param name="profile">The profile.</param>
+    /// <param name="throttlingService">The throttling service.</param>
+    /// <param name="systemClock">The system clock.</param>
+    /// <param name="logger">The logger.</param>
+    public DeviceCodeValidator(
+        IDeviceFlowCodeService       devices,
+        IProfileService              profile,
+        IDeviceFlowThrottlingService throttlingService,
+        ISystemClock                 systemClock,
+        ILogger<DeviceCodeValidator> logger)
     {
-        private readonly IDeviceFlowCodeService _devices;
-        private readonly IProfileService _profile;
-        private readonly IDeviceFlowThrottlingService _throttlingService;
-        private readonly ISystemClock _systemClock;
-        private readonly ILogger<DeviceCodeValidator> _logger;
+        _devices           = devices;
+        _profile           = profile;
+        _throttlingService = throttlingService;
+        _systemClock       = systemClock;
+        _logger            = logger;
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DeviceCodeValidator"/> class.
-        /// </summary>
-        /// <param name="devices">The devices.</param>
-        /// <param name="profile">The profile.</param>
-        /// <param name="throttlingService">The throttling service.</param>
-        /// <param name="systemClock">The system clock.</param>
-        /// <param name="logger">The logger.</param>
-        public DeviceCodeValidator(
-            IDeviceFlowCodeService devices,
-            IProfileService profile,
-            IDeviceFlowThrottlingService throttlingService,
-            ISystemClock systemClock,
-            ILogger<DeviceCodeValidator> logger)
+    public async Task<Either<ErrorWithCustomResponse, Unit>> ValidateAsync(Client client, string deviceCode) {
+        var dc = await _devices.FindByDeviceCodeAsync(deviceCode);
+
+        if (dc.IsNone)
         {
-            _devices = devices;
-            _profile = profile;
-            _throttlingService = throttlingService;
-            _systemClock = systemClock;
-            _logger = logger;
+            _logger.LogError("Invalid device code");
+            return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.InvalidGrant);
+        }
+        var deviceInstance = dc.Get();
+
+        // validate client binding
+        if (deviceInstance.ClientId != client.ClientId)
+        {
+            _logger.LogError("Client {ClientId} is trying to use a device code from client {DeviceClientId}", client.ClientId, deviceInstance.ClientId);
+            return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.InvalidGrant);
         }
 
-        /// <summary>
-        /// Validates the device code.
-        /// </summary>
-        /// <param name="context">The context.</param>
-        /// <returns></returns>
-        public async Task ValidateAsync(DeviceCodeValidationContext context)
+        if (await _throttlingService.ShouldSlowDown(deviceCode, deviceInstance))
         {
-            var deviceCode = await _devices.FindByDeviceCodeAsync(context.DeviceCode);
-
-            if (deviceCode == null)
-            {
-                _logger.LogError("Invalid device code");
-                context.Result = new TokenRequestValidationResult(context.Request, OidcConstants.TokenErrors.InvalidGrant);
-                return;
-            }
-            
-            // validate client binding
-            if (deviceCode.ClientId != context.Request.Client.ClientId)
-            {
-                _logger.LogError("Client {0} is trying to use a device code from client {1}", context.Request.Client.ClientId, deviceCode.ClientId);
-                context.Result = new TokenRequestValidationResult(context.Request, OidcConstants.TokenErrors.InvalidGrant);
-                return;
-            }
-
-            if (await _throttlingService.ShouldSlowDown(context.DeviceCode, deviceCode))
-            {
-                _logger.LogError("Client {0} is polling too fast", deviceCode.ClientId);
-                context.Result = new TokenRequestValidationResult(context.Request, OidcConstants.TokenErrors.SlowDown);
-                return;
-            }
-
-            // validate lifetime
-            if (deviceCode.CreationTime.AddSeconds(deviceCode.Lifetime) < _systemClock.UtcNow)
-            {
-                _logger.LogError("Expired device code");
-                context.Result = new TokenRequestValidationResult(context.Request, OidcConstants.TokenErrors.ExpiredToken);
-                return;
-            }
-
-            // denied
-            if (deviceCode.IsAuthorized
-                && (deviceCode.AuthorizedScopes == null || deviceCode.AuthorizedScopes.Any() == false))
-            {
-                _logger.LogError("No scopes authorized for device authorization. Access denied");
-                context.Result = new TokenRequestValidationResult(context.Request, OidcConstants.TokenErrors.AccessDenied);
-                return;
-            }
-
-            // make sure code is authorized
-            if (!deviceCode.IsAuthorized || deviceCode.Subject == null)
-            {
-                context.Result = new TokenRequestValidationResult(context.Request, OidcConstants.TokenErrors.AuthorizationPending);
-                return;
-            }
-
-            // make sure user is enabled
-            var isActiveCtx = new IsActiveContext(deviceCode.Subject, context.Request.Client, IdentityServerConstants.ProfileIsActiveCallers.DeviceCodeValidation);
-            await _profile.IsActiveAsync(isActiveCtx);
-
-            if (isActiveCtx.IsActive == false)
-            {
-                _logger.LogError("User has been disabled: {subjectId}", deviceCode.Subject.GetSubjectId());
-                context.Result = new TokenRequestValidationResult(context.Request, OidcConstants.TokenErrors.InvalidGrant);
-                return;
-            }
-
-            context.Request.DeviceCode = deviceCode;
-            context.Request.SessionId = deviceCode.SessionId;
-
-            context.Result = new TokenRequestValidationResult(context.Request);
-            await _devices.RemoveByDeviceCodeAsync(context.DeviceCode);
+            _logger.LogError("Client {DeviceClientId} is polling too fast", deviceInstance.ClientId);
+            return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.SlowDown);
         }
+
+        // validate lifetime
+        if (deviceInstance.CreationTime.AddSeconds(deviceInstance.Lifetime) < _systemClock.UtcNow)
+        {
+            _logger.LogError("Expired device code");
+            return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.ExpiredToken);
+        }
+
+        // denied
+        if (deviceInstance.IsAuthorized && !deviceInstance.AuthorizedScopes.Any())
+        {
+            _logger.LogError("No scopes authorized for device authorization. Access denied");
+            return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.AccessDenied);
+        }
+
+        // make sure code is authorized
+        if (deviceInstance.Subject.IsNone)
+            return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.AuthorizationPending);
+        var subject = deviceInstance.Subject.Get();
+
+        // make sure user is enabled
+        var isActive = await _profile.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.DeviceCodeValidation);
+        if (!isActive)
+        {
+            _logger.LogError("User has been disabled: {SubjectId}", subject.GetSubjectId());
+            return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        await _devices.RemoveByDeviceCodeAsync(deviceCode);
+        return Unit.Default;
     }
 }

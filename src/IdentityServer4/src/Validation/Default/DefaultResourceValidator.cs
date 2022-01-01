@@ -2,192 +2,53 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System.Linq;
+using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Stores;
+using IdentityServer4.Validation.Models;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Default;
+
+/// <summary>
+/// Default implementation of IResourceValidator.
+/// </summary>
+public sealed class DefaultResourceValidator : IResourceValidator
 {
+    readonly ILogger logger;
+    readonly IResourceStore store;
+
     /// <summary>
-    /// Default implementation of IResourceValidator.
+    /// Initializes a new instance of the <see cref="DefaultResourceValidator"/> class.
     /// </summary>
-    public class DefaultResourceValidator : IResourceValidator
+    /// <param name="store">The store.</param>
+    /// <param name="logger">The logger.</param>
+    public DefaultResourceValidator(IResourceStore store, ILogger<DefaultResourceValidator> logger)
     {
-        private readonly ILogger _logger;
-        private readonly IScopeParser _scopeParser;
-        private readonly IResourceStore _store;
+        this.logger      = logger;
+        this.store       = store;
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DefaultResourceValidator"/> class.
-        /// </summary>
-        /// <param name="store">The store.</param>
-        /// <param name="scopeParser"></param>
-        /// <param name="logger">The logger.</param>
-        public DefaultResourceValidator(IResourceStore store, IScopeParser scopeParser, ILogger<DefaultResourceValidator> logger)
-        {
-            _logger = logger;
-            _scopeParser = scopeParser;
-            _store = store;
-        }
+    /// <inheritdoc/>
+    public async Task<(Resource[] RequestedResources, ParsedScopeValidationError[] InvalidScopes)> ValidateScopesWithClient(Client client, IEnumerable<ParsedScopeValue> parsedScopes)
+    {
+        var scopeNames = parsedScopes.Select(x => x.Name).ToArray();
+        var resources = (await store.FindEnabledResourcesByScopeAsync(scopeNames)).AsArray();
 
-        /// <inheritdoc/>
-        public virtual async Task<ResourceValidationResult> ValidateRequestedResourcesAsync(ResourceValidationRequest request)
-        {
-            if (request == null) throw new ArgumentNullException(nameof(request));
+        var failedScopes = ValidateResourcesWithClient(client, resources).ToArray();
+        var finalResources = resources.Where(r => failedScopes.All(fs => fs.Scope != r.Name)).ToArray();
 
-            var parsedScopesResult = _scopeParser.ParseScopeValues(request.Scopes);
+        failedScopes.Iter(invalidScope => logger.LogError("Invalid parsed scope {Scope}, message: {Reason}", invalidScope.Scope, invalidScope.Reason));
 
-            var result = new ResourceValidationResult();
-            
-            if (!parsedScopesResult.Succeeded)
-            {
-                foreach (var invalidScope in parsedScopesResult.Errors)
-                {
-                    _logger.LogError("Invalid parsed scope {scope}, message: {error}", invalidScope.RawValue, invalidScope.Error);
-                    result.InvalidScopes.Add(invalidScope.RawValue);
-                }
+        return (finalResources, failedScopes);
+    }
 
-                return result;
-            }
-
-            var scopeNames = parsedScopesResult.ParsedScopes.Select(x => x.ParsedName).Distinct().ToArray();
-            var resourcesFromStore = await _store.FindEnabledResourcesByScopeAsync(scopeNames);
-
-            foreach (var scope in parsedScopesResult.ParsedScopes)
-            {
-                await ValidateScopeAsync(request.Client, resourcesFromStore, scope, result);
-            }
-
-            if (result.InvalidScopes.Count > 0)
-            {
-                result.Resources.IdentityResources.Clear();
-                result.Resources.ApiResources.Clear();
-                result.Resources.ApiScopes.Clear();
-                result.ParsedScopes.Clear();
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Validates that the requested scopes is contained in the store, and the client is allowed to request it.
-        /// </summary>
-        /// <param name="client"></param>
-        /// <param name="resourcesFromStore"></param>
-        /// <param name="requestedScope"></param>
-        /// <param name="result"></param>
-        /// <returns></returns>
-        protected virtual async Task ValidateScopeAsync(
-            Client client, 
-            Resources resourcesFromStore, 
-            ParsedScopeValue requestedScope, 
-            ResourceValidationResult result)
-        {
-            if (requestedScope.ParsedName == IdentityServerConstants.StandardScopes.OfflineAccess)
-            {
-                if (await IsClientAllowedOfflineAccessAsync(client))
-                {
-                    result.Resources.OfflineAccess = true;
-                    result.ParsedScopes.Add(new ParsedScopeValue(IdentityServerConstants.StandardScopes.OfflineAccess));
-                }
-                else
-                {
-                    result.InvalidScopes.Add(IdentityServerConstants.StandardScopes.OfflineAccess);
-                }
-            }
-            else
-            {
-                var identity = resourcesFromStore.FindIdentityResourcesByScope(requestedScope.ParsedName);
-                if (identity != null)
-                {
-                    if (await IsClientAllowedIdentityResourceAsync(client, identity))
-                    {
-                        result.ParsedScopes.Add(requestedScope);
-                        result.Resources.IdentityResources.Add(identity);
-                    }
-                    else
-                    {
-                        result.InvalidScopes.Add(requestedScope.RawValue);
-                    }
-                }
-                else
-                {
-                    var apiScope = resourcesFromStore.FindApiScope(requestedScope.ParsedName);
-                    if (apiScope != null)
-                    {
-                        if (await IsClientAllowedApiScopeAsync(client, apiScope))
-                        {
-                            result.ParsedScopes.Add(requestedScope);
-                            result.Resources.ApiScopes.Add(apiScope);
-
-                            var apis = resourcesFromStore.FindApiResourcesByScope(apiScope.Name);
-                            foreach (var api in apis)
-                            {
-                                result.Resources.ApiResources.Add(api);
-                            }
-                        }
-                        else
-                        {
-                            result.InvalidScopes.Add(requestedScope.RawValue);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogError("Scope {scope} not found in store.", requestedScope.ParsedName);
-                        result.InvalidScopes.Add(requestedScope.RawValue);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Determines if client is allowed access to the identity scope.
-        /// </summary>
-        /// <param name="client"></param>
-        /// <param name="identity"></param>
-        /// <returns></returns>
-        protected virtual Task<bool> IsClientAllowedIdentityResourceAsync(Client client, IdentityResource identity)
-        {
-            var allowed = client.AllowedScopes.Contains(identity.Name);
-            if (!allowed)
-            {
-                _logger.LogError("Client {client} is not allowed access to scope {scope}.", client.ClientId, identity.Name);
-            }
-            return Task.FromResult(allowed);
-        }
-
-        /// <summary>
-        /// Determines if client is allowed access to the API scope.
-        /// </summary>
-        /// <param name="client"></param>
-        /// <param name="apiScope"></param>
-        /// <returns></returns>
-        protected virtual Task<bool> IsClientAllowedApiScopeAsync(Client client, ApiScope apiScope)
-        {
-            var allowed = client.AllowedScopes.Contains(apiScope.Name);
-            if (!allowed)
-            {
-                _logger.LogError("Client {client} is not allowed access to scope {scope}.", client.ClientId, apiScope.Name);
-            }
-            return Task.FromResult(allowed);
-        }
-
-        /// <summary>
-        /// Validates if the client is allowed offline_access.
-        /// </summary>
-        /// <param name="client"></param>
-        /// <returns></returns>
-        protected virtual Task<bool> IsClientAllowedOfflineAccessAsync(Client client)
-        {
-            var allowed = client.AllowOfflineAccess;
-            if (!allowed)
-            {
-                _logger.LogError("Client {client} is not allowed access to scope offline_access (via AllowOfflineAccess setting).", client.ClientId);
-            }
-            return Task.FromResult(allowed);
-        }
+    static IEnumerable<ParsedScopeValidationError> ValidateResourcesWithClient(Client client, IEnumerable<Resource> resources) {
+        foreach (var resource in resources)
+            if (resource.Name == IdentityServerConstants.StandardScopes.OfflineAccess && !client.AllowOfflineAccess)
+                yield return new(resource.Name, "Offline access is not allowed!");
+            else if (!client.AllowedScopes.Contains(resource.Name))
+                yield return new(resource.Name, $"Client {client.ClientId} is not allowed access to scope {resource.Name}");
     }
 }

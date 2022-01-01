@@ -9,6 +9,7 @@ using IdentityServer4.Validation;
 using Microsoft.AspNetCore.Http;
 using IdentityServer4.Extensions;
 using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IdentityServer4.Endpoints.Results

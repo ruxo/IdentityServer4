@@ -7,12 +7,8 @@ using IdentityServer4.Models;
 using IdentityServer4.Stores;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
-using LanguageExt;
-using RZ.Foundation.Extensions;
-using static LanguageExt.Prelude;
+using IdentityServer4.Models.Contexts;
 
 // ReSharper disable once CheckNamespace
 namespace IdentityServer4.Services

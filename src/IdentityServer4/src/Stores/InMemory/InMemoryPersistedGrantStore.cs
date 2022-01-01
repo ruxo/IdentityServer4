@@ -2,100 +2,90 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Extensions;
-using IdentityServer4.Models;
+using System;
 using System.Collections.Concurrent;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System;
+using IdentityServer4.Extensions;
+using IdentityServer4.Models;
 
-namespace IdentityServer4.Stores
+namespace IdentityServer4.Stores.InMemory;
+
+/// <summary>
+/// In-memory persisted grant store
+/// </summary>
+public class InMemoryPersistedGrantStore : IPersistedGrantStore
 {
-    /// <summary>
-    /// In-memory persisted grant store
-    /// </summary>
-    public class InMemoryPersistedGrantStore : IPersistedGrantStore
+    readonly ConcurrentDictionary<string, PersistedGrant> repository = new();
+
+    /// <inheritdoc/>
+    public Task StoreAsync(PersistedGrant grant)
     {
-        private readonly ConcurrentDictionary<string, PersistedGrant> _repository = new ConcurrentDictionary<string, PersistedGrant>();
+        repository[grant.Key] = grant;
 
-        /// <inheritdoc/>
-        public Task StoreAsync(PersistedGrant grant)
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task<Option<PersistedGrant>> GetAsync(string key) =>
+        Task.FromResult(repository.TryGetValue(key, out var token) ? Some(token) : None);
+
+    /// <inheritdoc/>
+    public Task<IEnumerable<PersistedGrant>> GetAllAsync(PersistedGrantFilter filter)
+    {
+        filter.Validate();
+
+        var items = Filter(filter);
+
+        return Task.FromResult(items);
+    }
+
+    /// <inheritdoc/>
+    public Task RemoveAsync(string key)
+    {
+        repository.TryRemove(key, out _);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task RemoveAllAsync(PersistedGrantFilter filter)
+    {
+        filter.Validate();
+
+        var items = Filter(filter);
+
+        foreach (var item in items)
         {
-            _repository[grant.Key] = grant;
-
-            return Task.CompletedTask;
+            repository.TryRemove(item.Key, out _);
         }
 
-        /// <inheritdoc/>
-        public Task<PersistedGrant> GetAsync(string key)
-        {
-            if (_repository.TryGetValue(key, out PersistedGrant token))
-            {
-                return Task.FromResult(token);
-            }
+        return Task.CompletedTask;
+    }
 
-            return Task.FromResult<PersistedGrant>(null);
+    IEnumerable<PersistedGrant> Filter(PersistedGrantFilter filter)
+    {
+        var query =
+            from item in repository
+            select item.Value;
+
+        if (!String.IsNullOrWhiteSpace(filter.ClientId))
+        {
+            query = query.Where(x => x.ClientId == filter.ClientId);
+        }
+        if (!String.IsNullOrWhiteSpace(filter.SessionId))
+        {
+            query = query.Where(x => x.SessionId == filter.SessionId);
+        }
+        if (!String.IsNullOrWhiteSpace(filter.SubjectId))
+        {
+            query = query.Where(x => x.SubjectId == filter.SubjectId);
+        }
+        if (!String.IsNullOrWhiteSpace(filter.Type))
+        {
+            query = query.Where(x => x.Type == filter.Type);
         }
 
-        /// <inheritdoc/>
-        public Task<IEnumerable<PersistedGrant>> GetAllAsync(PersistedGrantFilter filter)
-        {
-            filter.Validate();
-            
-            var items = Filter(filter);
-            
-            return Task.FromResult(items);
-        }
-
-        /// <inheritdoc/>
-        public Task RemoveAsync(string key)
-        {
-            _repository.TryRemove(key, out _);
-
-            return Task.CompletedTask;
-        }
-
-        /// <inheritdoc/>
-        public Task RemoveAllAsync(PersistedGrantFilter filter)
-        {
-            filter.Validate();
-
-            var items = Filter(filter);
-            
-            foreach (var item in items)
-            {
-                _repository.TryRemove(item.Key, out _);
-            }
-
-            return Task.CompletedTask;
-        }
-
-        private IEnumerable<PersistedGrant> Filter(PersistedGrantFilter filter)
-        {
-            var query =
-                from item in _repository
-                select item.Value;
-
-            if (!String.IsNullOrWhiteSpace(filter.ClientId))
-            {
-                query = query.Where(x => x.ClientId == filter.ClientId);
-            }
-            if (!String.IsNullOrWhiteSpace(filter.SessionId))
-            {
-                query = query.Where(x => x.SessionId == filter.SessionId);
-            }
-            if (!String.IsNullOrWhiteSpace(filter.SubjectId))
-            {
-                query = query.Where(x => x.SubjectId == filter.SubjectId);
-            }
-            if (!String.IsNullOrWhiteSpace(filter.Type))
-            {
-                query = query.Where(x => x.Type == filter.Type);
-            }
-
-            var items = query.ToArray().AsEnumerable();
-            return items;
-        }
+        var items = query.ToArray().AsEnumerable();
+        return items;
     }
 }

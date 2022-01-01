@@ -3,84 +3,60 @@
 
 
 using IdentityServer4.Models;
+using IdentityServer4.Validation.Models;
 using Microsoft.Extensions.Logging;
-using System.Collections.Specialized;
-using System.Threading.Tasks;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Default;
+
+/// <summary>
+/// The introspection request validator
+/// </summary>
+/// <seealso cref="IdentityServer4.Validation.IIntrospectionRequestValidator" />
+class IntrospectionRequestValidator : IIntrospectionRequestValidator
 {
+    readonly ILogger logger;
+    readonly ITokenValidator tokenValidator;
+
     /// <summary>
-    /// The introspection request validator
+    /// Initializes a new instance of the <see cref="IntrospectionRequestValidator"/> class.
     /// </summary>
-    /// <seealso cref="IdentityServer4.Validation.IIntrospectionRequestValidator" />
-    internal class IntrospectionRequestValidator : IIntrospectionRequestValidator
+    /// <param name="tokenValidator">The token validator.</param>
+    /// <param name="logger">The logger.</param>
+    public IntrospectionRequestValidator(ITokenValidator tokenValidator, ILogger<IntrospectionRequestValidator> logger)
     {
-        private readonly ILogger _logger;
-        private readonly ITokenValidator _tokenValidator;
+        this.tokenValidator = tokenValidator;
+        this.logger = logger;
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="IntrospectionRequestValidator"/> class.
-        /// </summary>
-        /// <param name="tokenValidator">The token validator.</param>
-        /// <param name="logger">The logger.</param>
-        public IntrospectionRequestValidator(ITokenValidator tokenValidator, ILogger<IntrospectionRequestValidator> logger)
+    /// <summary>
+    /// Validates the request.
+    /// </summary>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="api">The API.</param>
+    /// <returns></returns>
+    public async Task<Either<ErrorInfo, TokenValidationResult>> ValidateAsync(Dictionary<string,string> parameters, ApiResource api)
+    {
+        logger.LogDebug("Introspection request validation started");
+
+        var token = parameters.Get("token");
+        if (token.IsNone)
         {
-            _tokenValidator = tokenValidator;
-            _logger = logger;
+            logger.LogError("Token is missing");
+
+            return new ErrorInfo("missing_token");
         }
 
-        /// <summary>
-        /// Validates the request.
-        /// </summary>
-        /// <param name="parameters">The parameters.</param>
-        /// <param name="api">The API.</param>
-        /// <returns></returns>
-        public async Task<IntrospectionRequestValidationResult> ValidateAsync(NameValueCollection parameters, ApiResource api)
+        var tokenValidationResult = await tokenValidator.ValidateAccessTokenAsync(token.Get());
+
+        if (tokenValidationResult.IsLeft)
         {
-            _logger.LogDebug("Introspection request validation started");
+            logger.LogDebug("Token {Token} is invalid", token.Get());
 
-            // retrieve required token
-            var token = parameters.Get("token");
-            if (token == null)
-            {
-                _logger.LogError("Token is missing");
-
-                return new(){
-                    IsError = true,
-                    Api = api,
-                    Error = "missing_token",
-                    Parameters = parameters
-                };
-            }
-
-            // validate token
-            var tokenValidationResult = await _tokenValidator.ValidateAccessTokenAsync(token);
-
-            // invalid or unknown token
-            if (tokenValidationResult.IsError)
-            {
-                _logger.LogDebug("Token is invalid");
-
-                return new(){
-                    IsActive = false,
-                    IsError = false,
-                    Token = token,
-                    Api = api,
-                    Parameters = parameters
-                };
-            }
-
-            _logger.LogDebug("Introspection request validation successful");
-
-            // valid token
-            return new(){
-                IsActive = true,
-                IsError = false,
-                Token = token,
-                Claims = tokenValidationResult.Claims,
-                Api = api,
-                Parameters = parameters
-            };
+            return tokenValidationResult;
         }
+
+        logger.LogDebug("Introspection request validation successful");
+
+        return tokenValidationResult;
     }
 }

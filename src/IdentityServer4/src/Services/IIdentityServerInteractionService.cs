@@ -3,8 +3,9 @@
 
 
 using IdentityServer4.Models;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using IdentityServer4.Models.Messages;
+
+// ReSharper disable UnusedMemberInSuper.Global
 
 namespace IdentityServer4.Services
 {
@@ -41,7 +42,7 @@ namespace IdentityServer4.Services
         /// Used to create a logoutId if there is not one presently.
         /// </summary>
         /// <returns></returns>
-        Task<string> CreateLogoutContextAsync();
+        Task<Option<string>> CreateLogoutContextAsync();
 
         /// <summary>
         /// Informs IdentityServer of the user's consent.
@@ -58,7 +59,7 @@ namespace IdentityServer4.Services
         /// <param name="request">The request.</param>
         /// <param name="error"></param>
         /// <param name="errorDescription"></param>
-        Task DenyAuthorizationAsync(AuthorizationRequest request, AuthorizationError error, string errorDescription = null);
+        Task DenyAuthorizationAsync(AuthorizationRequest request, AuthorizationError error, string? errorDescription = null);
 
         /// <summary>
         /// Returns a collection representing all of the user's consents and grants.

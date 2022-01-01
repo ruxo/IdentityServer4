@@ -19,13 +19,19 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using System;
 using System.Linq;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Models;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication;
 using static IdentityServer4.Constants;
 using IdentityServer4.Extensions;
 using IdentityServer4.Hosting.FederatedSignOut;
+using IdentityServer4.Models.Contexts;
+using IdentityServer4.Models.Messages;
+using IdentityServer4.ResponseHandling.Default;
 using IdentityServer4.Services.Default;
+using IdentityServer4.Stores.Default;
+using IdentityServer4.Validation.Default;
 
 namespace Microsoft.Extensions.DependencyInjection
 {

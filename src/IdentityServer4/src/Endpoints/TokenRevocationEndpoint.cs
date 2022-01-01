@@ -56,7 +56,7 @@ namespace IdentityServer4.Endpoints
         /// </summary>
         /// <param name="context">The HTTP context.</param>
         /// <returns></returns>
-        public async Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public async Task HandleRequest(HttpContext context)
         {
             _logger.LogTrace("Processing revocation request.");
 
@@ -92,7 +92,7 @@ namespace IdentityServer4.Endpoints
             _logger.LogTrace("Client validation successful");
 
             // validate the token request
-            var form = (await context.Request.ReadFormAsync()).AsNameValueCollection();
+            var form = (await context.Request.ReadFormAsync()).ToNameValueDictionary();
 
             _logger.LogTrace("Calling into token revocation request validator: {type}", _requestValidator.GetType().FullName);
             var requestValidationResult = await _requestValidator.ValidateRequestAsync(form, clientValidationResult.Client);

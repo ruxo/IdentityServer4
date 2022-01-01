@@ -15,17 +15,19 @@ namespace IdentityServer4.Models
         /// <summary>
         /// The claim type
         /// </summary>
-        public string Type { get; set; }
-        
+        public string Type { get; set; } = string.Empty;
+
         /// <summary>
         /// The claim value
         /// </summary>
-        public string Value { get; set; }
+        public string Value { get; set; } = string.Empty;
 
         /// <summary>
         /// The claim value type
         /// </summary>
         public string ValueType { get; set; } = ClaimValueTypes.String;
+
+        #region Constructors
 
         /// <summary>
         /// ctor
@@ -58,10 +60,14 @@ namespace IdentityServer4.Models
             ValueType = valueType;
         }
 
+        #endregion
+
+        #region Equality Operators
+
         /// <inheritdoc/>
         public override int GetHashCode()
         {
-            unchecked 
+            unchecked
             {
                 int hash = 17;
 
@@ -73,17 +79,12 @@ namespace IdentityServer4.Models
         }
 
         /// <inheritdoc/>
-        public override bool Equals(object obj)
-        {
-            if (obj is null) return false;
-            if (obj is ClientClaim c)
-            {
-                return (string.Equals(Type, c.Type, StringComparison.Ordinal) &&
-                        string.Equals(Value, c.Value, StringComparison.Ordinal) &&
-                        string.Equals(ValueType, c.ValueType, StringComparison.Ordinal));
-            }
+        public override bool Equals(object? obj) =>
+            obj is ClientClaim c &&
+            string.Equals(Type,      c.Type,      StringComparison.Ordinal) &&
+            string.Equals(Value,     c.Value,     StringComparison.Ordinal) &&
+            string.Equals(ValueType, c.ValueType, StringComparison.Ordinal);
 
-            return false;
-        }
+        #endregion
     }
 }

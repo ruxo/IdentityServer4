@@ -3,116 +3,75 @@
 
 
 using System;
-using System.Collections.Generic;
 using System.Security.Claims;
 
-namespace IdentityServer4.Models
+namespace IdentityServer4.Models;
+
+/// <summary>
+/// Models a refresh token.
+/// </summary>
+public sealed record RefreshToken(Token AccessToken, int Lifetime, Option<DateTime> ConsumedTime, DateTime CreationTime)
 {
     /// <summary>
-    /// Models a refresh token.
+    /// Gets or sets the original subject that requested the token.
     /// </summary>
-    public class RefreshToken
+    /// <value>
+    /// The subject.
+    /// </value>
+    public ClaimsPrincipal Subject
     {
-        /// <summary>
-        /// Gets or sets the creation time.
-        /// </summary>
-        /// <value>
-        /// The creation time.
-        /// </value>
-        public DateTime CreationTime { get; set; }
-
-        /// <summary>
-        /// Gets or sets the life time.
-        /// </summary>
-        /// <value>
-        /// The life time.
-        /// </value>
-        public int Lifetime { get; set; }
-
-        /// <summary>
-        /// Gets or sets the consumed time.
-        /// </summary>
-        /// <value>
-        /// The consumed time.
-        /// </value>
-        public DateTime? ConsumedTime { get; set; }
-
-        /// <summary>
-        /// Gets or sets the access token.
-        /// </summary>
-        /// <value>
-        /// The access token.
-        /// </value>
-        public Token AccessToken { get; set; }
-
-        /// <summary>
-        /// Gets or sets the original subject that requiested the token.
-        /// </summary>
-        /// <value>
-        /// The subject.
-        /// </value>
-        public ClaimsPrincipal Subject
+        get
         {
-            get
-            {
-                var user = new IdentityServerUser(SubjectId);
-                if (AccessToken.Claims != null)
-                {
-                    foreach (var claim in AccessToken.Claims)
-                    {
-                        user.AdditionalClaims.Add(claim);
-                    }
-                }
-                return user.CreatePrincipal();
+            var user = new IdentityServerUser(SubjectId);
+            foreach (var claim in AccessToken.Claims) {
+                user.AdditionalClaims.Add(claim);
             }
+            return user.CreatePrincipal();
         }
-
-        /// <summary>
-        /// Gets or sets the version number.
-        /// </summary>
-        /// <value>
-        /// The version.
-        /// </value>
-        public int Version { get; set; } = 4;
-
-        /// <summary>
-        /// Gets the client identifier.
-        /// </summary>
-        /// <value>
-        /// The client identifier.
-        /// </value>
-        public string ClientId => AccessToken.ClientId;
-
-        /// <summary>
-        /// Gets the subject identifier.
-        /// </summary>
-        /// <value>
-        /// The subject identifier.
-        /// </value>
-        public string SubjectId => AccessToken.SubjectId;
-
-        /// <summary>
-        /// Gets the session identifier.
-        /// </summary>
-        /// <value>
-        /// The session identifier.
-        /// </value>
-        public string SessionId => AccessToken.SessionId;
-
-        /// <summary>
-        /// Gets the description the user assigned to the device being authorized.
-        /// </summary>
-        /// <value>
-        /// The description.
-        /// </value>
-        public string Description => AccessToken.Description;
-
-        /// <summary>
-        /// Gets the scopes.
-        /// </summary>
-        /// <value>
-        /// The scopes.
-        /// </value>
-        public IEnumerable<string> Scopes => AccessToken.Scopes;
     }
+
+    /// <summary>
+    /// the version number.
+    /// </summary>
+    public int Version => 1000;
+
+    /// <summary>
+    /// Gets the client identifier.
+    /// </summary>
+    /// <value>
+    /// The client identifier.
+    /// </value>
+    public string ClientId => AccessToken.ClientId;
+
+    /// <summary>
+    /// Gets the subject identifier.
+    /// </summary>
+    /// <value>
+    /// The subject identifier.
+    /// </value>
+    public string SubjectId => AccessToken.SubjectId;
+
+    /// <summary>
+    /// Gets the session identifier.
+    /// </summary>
+    /// <value>
+    /// The session identifier.
+    /// </value>
+    public Option<string> SessionId => AccessToken.SessionId;
+
+    /// <summary>
+    /// Gets the description the user assigned to the device being authorized.
+    /// </summary>
+    /// <value>
+    /// The description.
+    /// </value>
+    public string? Description => AccessToken.Description;
+
+    /// <summary>
+    /// Gets the scopes.
+    /// </summary>
+    /// <value>
+    /// The scopes.
+    /// </value>
+    public IEnumerable<string> Scopes => AccessToken.Scopes;
 }

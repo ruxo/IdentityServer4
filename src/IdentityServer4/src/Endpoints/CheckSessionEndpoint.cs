@@ -20,7 +20,7 @@ namespace IdentityServer4.Endpoints
             _logger = logger;
         }
 
-        public Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public Task HandleRequest(HttpContext context)
         {
             IEndpointResult result;
 

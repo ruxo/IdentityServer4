@@ -3,66 +3,56 @@
 
 
 using System;
+using System.Net.Http;
+using IdentityModel;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Models;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
-using System.Threading.Tasks;
-using IdentityModel;
-using IdentityServer4.Configuration;
 
-namespace IdentityServer4.Services
+namespace IdentityServer4.Services.Default;
+
+/// <summary>
+/// Default JwtRequest client
+/// </summary>
+public class DefaultJwtRequestUriHttpClient : IJwtRequestUriHttpClient
 {
+    readonly HttpClient http;
+    readonly IdentityServerOptions options;
+    readonly ILogger logger;
+
     /// <summary>
-    /// Default JwtRequest client
+    /// ctor
     /// </summary>
-    public class DefaultJwtRequestUriHttpClient : IJwtRequestUriHttpClient
+    public DefaultJwtRequestUriHttpClient(HttpClient http, IdentityServerOptions options, ILogger<DefaultJwtRequestUriHttpClient> logger)
     {
-        private readonly HttpClient _client;
-        private readonly IdentityServerOptions _options;
-        private readonly ILogger<DefaultJwtRequestUriHttpClient> _logger;
+        this.http = http;
+        this.options = options;
+        this.logger = logger;
+    }
 
-        /// <summary>
-        /// ctor
-        /// </summary>
-        /// <param name="client">An HTTP client</param>
-        /// <param name="options">The options.</param>
-        /// <param name="loggerFactory">The logger factory</param>
-        public DefaultJwtRequestUriHttpClient(HttpClient client, IdentityServerOptions options, ILoggerFactory loggerFactory)
+
+    /// <inheritdoc />
+    public async Task<Option<string>> GetJwtAsync(string url, Client client)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+        // req.Properties.Add(IdentityServerConstants.JwtRequestClientKey, client);
+        req.Options.Set(new(IdentityServerConstants.JwtRequestClientKey), client);
+
+        var response = await http.SendAsync(req);
+        if (response.IsSuccessStatusCode)
         {
-            _client = client;
-            _options = options;
-            _logger = loggerFactory.CreateLogger<DefaultJwtRequestUriHttpClient>();
-        }
-
-
-        /// <inheritdoc />
-        public async Task<string> GetJwtAsync(string url, Client client)
-        {
-            var req = new HttpRequestMessage(HttpMethod.Get, url);
-            // req.Properties.Add(IdentityServerConstants.JwtRequestClientKey, client);
-            req.Options.Set(new HttpRequestOptionsKey<Client>(IdentityServerConstants.JwtRequestClientKey), client);
-
-            var response = await _client.SendAsync(req);
-            if (response.StatusCode == System.Net.HttpStatusCode.OK)
-            {
-                if (_options.StrictJarValidation)
-                {
-                    if (!string.Equals(response.Content.Headers.ContentType.MediaType,
-                        $"application/{JwtClaimTypes.JwtTypes.AuthorizationRequest}", StringComparison.Ordinal))
-                    {
-                        _logger.LogError("Invalid content type {type} from jwt url {url}", response.Content.Headers.ContentType.MediaType, url);
-                        return null;
-                    }
-                }
-
-                _logger.LogDebug("Success http response from jwt url {url}", url);
-                
-                var json = await response.Content.ReadAsStringAsync();
-                return json;
+            if (options.StrictJarValidation &&
+                !$"application/{JwtClaimTypes.JwtTypes.AuthorizationRequest}".Equals(response.Content.Headers.ContentType!.MediaType, StringComparison.Ordinal)) {
+                logger.LogError("Invalid content type {Type} from jwt url {Url}", response.Content.Headers.ContentType.MediaType, url);
+                return None;
             }
-                
-            _logger.LogError("Invalid http status code {status} from jwt url {url}", response.StatusCode, url);
-            return null;
+
+            logger.LogDebug("Success http response from jwt url {Url}", url);
+
+            return await response.Content.ReadAsStringAsync();
         }
+
+        logger.LogError("Invalid http status code {Status} from jwt url {Url}", response.StatusCode, url);
+        return None;
     }
 }

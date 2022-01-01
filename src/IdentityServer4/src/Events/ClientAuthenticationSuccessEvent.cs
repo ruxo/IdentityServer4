@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using IdentityServer4.Events.Infrastructure;
+
 namespace IdentityServer4.Events
 {
     /// <summary>
     /// Event for successful client authentication
     /// </summary>
-    /// <seealso cref="IdentityServer4.Events.Event" />
+    /// <seealso cref="Event" />
     public class ClientAuthenticationSuccessEvent : Event
     {
         /// <summary>

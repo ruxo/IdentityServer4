@@ -26,7 +26,7 @@ namespace IdentityServer4.Models
         {
             ClientId = request.Client.ClientId;
             Nonce = request.Parameters[OidcConstants.AuthorizeRequest.Nonce];
-            ScopesRequested = request.Parameters[OidcConstants.AuthorizeRequest.Scope].ParseScopesString();
+            ScopesRequested = request.Parameters[OidcConstants.AuthorizeRequest.Scope].ParseScopesString().ToArray();
             Subject = subject;
         }
 
@@ -35,11 +35,11 @@ namespace IdentityServer4.Models
         /// </summary>
         /// <param name="parameters">The parameters.</param>
         /// <param name="subject">The subject.</param>
-        public ConsentRequest(NameValueCollection parameters, string subject)
+        public ConsentRequest(Dictionary<string,string> parameters, string subject)
         {
             ClientId = parameters[OidcConstants.AuthorizeRequest.ClientId];
             Nonce = parameters[OidcConstants.AuthorizeRequest.Nonce];
-            ScopesRequested = parameters[OidcConstants.AuthorizeRequest.Scope].ParseScopesString();
+            ScopesRequested = parameters[OidcConstants.AuthorizeRequest.Scope].ParseScopesString().ToArray();
             Subject = subject;
         }
 

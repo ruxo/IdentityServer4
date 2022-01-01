@@ -2,41 +2,32 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Extensions;
-using IdentityServer4.Models;
 using System.Linq;
-using System.Threading.Tasks;
+using IdentityServer4.Models.Contexts;
+using IdentityServer4.Services;
 
-namespace IdentityServer4.Services
+namespace IdentityServer4.Extensions;
+
+/// <summary>
+/// Extension for IUserSession.
+/// </summary>
+public static class IUserSessionExtensions
 {
     /// <summary>
-    /// Extension for IUserSession.
+    /// Creates a LogoutNotificationContext for the current user session.
     /// </summary>
-    public static class IUserSessionExtensions
-    {
-        /// <summary>
-        /// Creates a LogoutNotificationContext for the current user session.
-        /// </summary>
-        /// <returns></returns>
-        public static async Task<LogoutNotificationContext> GetLogoutNotificationContext(this IUserSession session)
+    /// <returns></returns>
+    public static async Task<Option<LogoutNotificationContext>> GetLogoutNotificationContext(this IUserSession session) {
+        var clientIds = (await session.GetClientListAsync()).ToArray();
+
+        if (clientIds.Any())
         {
-            var clientIds = await session.GetClientListAsync();
+            var user = await session.GetUserAsync();
+            var sub = user.Get().GetSubjectId();
+            var sid = await session.GetSessionIdAsync();
 
-            if (clientIds.Any())
-            {
-                var user = await session.GetUserAsync();
-                var sub = user.GetSubjectId();
-                var sid = await session.GetSessionIdAsync();
-
-                return new LogoutNotificationContext
-                {
-                    SubjectId = sub,
-                    SessionId = sid,
-                    ClientIds = clientIds
-                };
-            }
-
-            return null;
+            return new LogoutNotificationContext(sub, sid, clientIds);
         }
+        return None;
     }
 }

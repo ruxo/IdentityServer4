@@ -3,97 +3,51 @@
 
 
 using System;
-using System.Collections.Generic;
 using System.Security.Claims;
 
-namespace IdentityServer4.Models
+namespace IdentityServer4.Models;
+
+/// <summary>
+/// Represents data needed for device flow.
+/// </summary>
+/// <param name="ClientId">the client identifier</param>
+/// <param name="Description">the description the user assigned to the device being authorized.</param>
+/// <param name="IsOpenId">a value indicating whether this instance is open identifier.</param>
+// ReSharper disable once NotAccessedPositionalProperty.Global
+public sealed record DeviceCode(string Code, string ClientId, string Description, bool IsOpenId, int Lifetime, DateTime CreationTime, string[] RequestedScopes) : IAuthorizationModel
 {
     /// <summary>
-    /// Represents data needed for device flow.
+    /// Gets or sets a value indicating whether this instance is authorized.
     /// </summary>
-    public class DeviceCode : IAuthorizationModel
-    {
-        /// <summary>
-        /// Gets or sets the creation time.
-        /// </summary>
-        /// <value>
-        /// The creation time.
-        /// </value>
-        public DateTime CreationTime { get; set; }
+    /// <value>
+    ///   <c>true</c> if this instance is authorized; otherwise, <c>false</c>.
+    /// </value>
+    public bool IsAuthorized { get; set; }
 
-        /// <summary>
-        /// Gets or sets the lifetime.
-        /// </summary>
-        /// <value>
-        /// The lifetime.
-        /// </value>
-        public int Lifetime { get; set; }
+    /// <summary>
+    /// Gets or sets the authorized scopes.
+    /// </summary>
+    /// <value>
+    /// The authorized scopes.
+    /// </value>
+    public string[] AuthorizedScopes { get; set; } = Array.Empty<string>();
 
-        /// <summary>
-        /// Gets or sets the client identifier.
-        /// </summary>
-        /// <value>
-        /// The client identifier.
-        /// </value>
-        public string? ClientId { get; set; }
+    /// <inheritdoc />
+    public string[] Scopes => AuthorizedScopes;
 
-        /// <summary>
-        /// Gets the description the user assigned to the device being authorized.
-        /// </summary>
-        /// <value>
-        /// The description.
-        /// </value>
-        public string Description { get; set; }
+    /// <inheritdoc />
+    public Option<ClaimsPrincipal> Subject { get; set; }
 
-        /// <summary>
-        /// Gets or sets a value indicating whether this instance is open identifier.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if this instance is open identifier; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsOpenId { get; set; }
+    /// <summary>
+    /// Gets or sets the session identifier.
+    /// </summary>
+    /// <value>
+    /// The session identifier.
+    /// </value>
+    public string SessionId { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Gets or sets a value indicating whether this instance is authorized.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if this instance is authorized; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsAuthorized { get; set; }
-
-        /// <summary>
-        /// Gets or sets the requested scopes.
-        /// </summary>
-        /// <value>
-        /// The authorized scopes.
-        /// </value>
-        public IEnumerable<string> RequestedScopes { get; set; }
-
-        /// <summary>
-        /// Gets or sets the authorized scopes.
-        /// </summary>
-        /// <value>
-        /// The authorized scopes.
-        /// </value>
-        public IEnumerable<string> AuthorizedScopes { get; set; }
-
-        /// <inheritdoc />
-        public IEnumerable<string> Scopes => AuthorizedScopes;
-
-        /// <summary>
-        /// Gets or sets the subject.
-        /// </summary>
-        /// <value>
-        /// The subject.
-        /// </value>
-        public ClaimsPrincipal Subject { get; set; }
-
-        /// <summary>
-        /// Gets or sets the session identifier.
-        /// </summary>
-        /// <value>
-        /// The session identifier.
-        /// </value>
-        public string SessionId { get; set; }
-    }
+    /// <summary>
+    /// Description after consent is granted.
+    /// </summary>
+    public string ConsentDescription { get; set; } = string.Empty;
 }

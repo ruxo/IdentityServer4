@@ -11,6 +11,8 @@ using System;
 using System.Net.Http;
 using IdentityServer4;
 using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Services.Default;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Extensions.DependencyInjection

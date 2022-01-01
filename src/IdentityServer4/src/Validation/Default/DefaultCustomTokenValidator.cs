@@ -2,55 +2,25 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Services;
-using IdentityServer4.Stores;
-using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
+using IdentityServer4.Validation.Models;
+#pragma warning disable CS1998
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Default;
+
+/// <summary>
+/// Default custom token validator
+/// </summary>
+public sealed class DefaultCustomTokenValidator : ICustomTokenValidator
 {
-    /// <summary>
-    /// Default custom token validator
-    /// </summary>
-    public class DefaultCustomTokenValidator : ICustomTokenValidator
+    /// <inheritdoc />
+    public async Task<Option<ErrorInfo>> ValidateAccessTokenAsync(string token, TokenValidationResult result)
     {
-        /// <summary>
-        /// The logger
-        /// </summary>
-        protected readonly ILogger Logger;
+        return None;
+    }
 
-        /// <summary>
-        /// The user service
-        /// </summary>
-        protected readonly IProfileService Profile;
-
-        /// <summary>
-        /// The client store
-        /// </summary>
-        protected readonly IClientStore Clients;
-
-        /// <summary>
-        /// Custom validation logic for access tokens.
-        /// </summary>
-        /// <param name="result">The validation result so far.</param>
-        /// <returns>
-        /// The validation result
-        /// </returns>
-        public virtual Task<TokenValidationResult> ValidateAccessTokenAsync(TokenValidationResult result)
-        {
-            return Task.FromResult(result);
-        }
-
-        /// <summary>
-        /// Custom validation logic for identity tokens.
-        /// </summary>
-        /// <param name="result">The validation result so far.</param>
-        /// <returns>
-        /// The validation result
-        /// </returns>
-        public virtual Task<TokenValidationResult> ValidateIdentityTokenAsync(TokenValidationResult result)
-        {
-            return Task.FromResult(result);
-        }
+    /// <inheritdoc />
+    public async Task<Option<ErrorInfo>> ValidateIdentityTokenAsync(string token, ValidatedJwtAccessToken result)
+    {
+        return None;
     }
 }

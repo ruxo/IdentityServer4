@@ -12,20 +12,22 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using LanguageExt;
 
 namespace IdentityServer4
 {
-    internal class MessageCookie<TModel>
+    class MessageCookie<TModel>
     {
-        private readonly ILogger _logger;
-        private readonly IdentityServerOptions _options;
-        private readonly IHttpContextAccessor _context;
-        private readonly IDataProtector _protector;
+        readonly ILogger _logger;
+        readonly IdentityServerOptions _options;
+        readonly IHttpContextAccessor _context;
+        readonly IDataProtector _protector;
 
         public MessageCookie(
-            ILogger<MessageCookie<TModel>> logger, 
+            ILogger<MessageCookie<TModel>> logger,
             IdentityServerOptions options,
-            IHttpContextAccessor context, 
+            IHttpContextAccessor context,
             IDataProtectionProvider provider)
         {
             _logger = logger;
@@ -34,9 +36,9 @@ namespace IdentityServer4
             _protector = provider.CreateProtector(MessageType);
         }
 
-        private string MessageType => typeof(TModel).Name;
+        string MessageType => typeof(TModel).Name;
 
-        private string Protect(Message<TModel> message)
+        string Protect(Message<TModel> message)
         {
             var json = ObjectSerializer.ToString(message);
             _logger.LogTrace("Protecting message: {0}", json);
@@ -44,23 +46,23 @@ namespace IdentityServer4
             return _protector.Protect(json);
         }
 
-        private Message<TModel> Unprotect(string data)
+        Message<TModel> Unprotect(string data)
         {
             var json = _protector.Unprotect(data);
             var message = ObjectSerializer.FromString<Message<TModel>>(json);
             return message;
         }
 
-        private string CookiePrefix => MessageType + ".";
+        string CookiePrefix => MessageType + ".";
 
-        private string GetCookieFullName(string id)
+        string GetCookieFullName(string id)
         {
             return CookiePrefix + id;
         }
 
-        private string CookiePath => _context.HttpContext.GetIdentityServerBasePath().CleanUrlPath();
+        string CookiePath => _context.HttpContext.GetIdentityServerBasePath().CleanUrlPath();
 
-        private IEnumerable<string> GetCookieNames()
+        IEnumerable<string> GetCookieNames()
         {
             var key = CookiePrefix;
             foreach ((string name, var _) in _context.HttpContext.Request.Cookies)
@@ -72,7 +74,7 @@ namespace IdentityServer4
             }
         }
 
-        private bool Secure => _context.HttpContext.Request.IsHttps;
+        bool Secure => _context.HttpContext.Request.IsHttps;
 
         public void Write(string id, Message<TModel> message)
         {
@@ -93,19 +95,14 @@ namespace IdentityServer4
                     Path = CookiePath,
                     IsEssential = true
                     // don't need to set same-site since cookie is expected to be sent
-                    // to only another page in this host. 
+                    // to only another page in this host.
                 });
         }
 
-        public Message<TModel> Read(string id)
-        {
-            if (id.IsMissing()) return null;
+        public Option<Message<TModel>> Read(string id) =>
+            id.AsPresent().Map(_ => ReadByCookieName(GetCookieFullName(id)));
 
-            var name = GetCookieFullName(id);
-            return ReadByCookieName(name);
-        }
-
-        private Message<TModel> ReadByCookieName(string name)
+        Message<TModel> ReadByCookieName(string name)
         {
             var data = _context.HttpContext.Request.Cookies[name];
             if (data.IsPresent())
@@ -129,7 +126,7 @@ namespace IdentityServer4
             ClearByCookieName(name);
         }
 
-        private void ClearByCookieName(string name)
+        void ClearByCookieName(string name)
         {
             _context.HttpContext.Response.Cookies.Append(
                 name,
@@ -144,8 +141,8 @@ namespace IdentityServer4
                 });
         }
 
-        private long GetCookieRank(string name)
-        {   
+        long GetCookieRank(string name)
+        {
             // empty and invalid cookies are considered to be the oldest:
             var rank = DateTime.MinValue.Ticks;
 
@@ -159,15 +156,15 @@ namespace IdentityServer4
                 }
             }
             catch (CryptographicException e)
-            {   
+            {
                 // cookie was protected with a different key/algorithm
                 _logger.LogDebug(e, "Unable to unprotect cookie {0}", name);
             }
-            
+
             return rank;
         }
 
-        private void ClearOverflow()
+        void ClearOverflow()
         {
             var names = GetCookieNames();
             var toKeep = _options.UserInteraction.CookieMessageThreshold;

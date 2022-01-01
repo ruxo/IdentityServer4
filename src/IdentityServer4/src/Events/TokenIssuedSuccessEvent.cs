@@ -2,201 +2,91 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System.Linq;
 using IdentityModel;
 using IdentityServer4.Extensions;
 using IdentityServer4.ResponseHandling;
 using IdentityServer4.Validation;
-using System.Collections.Generic;
+using IdentityServer4.Events.Infrastructure;
+using IdentityServer4.ResponseHandling.Models;
 using static IdentityServer4.Constants;
+// ReSharper disable NotAccessedPositionalProperty.Global
 
-namespace IdentityServer4.Events
+namespace IdentityServer4.Events;
+
+/// <summary>
+/// Event for successful token issuance
+/// </summary>
+/// <seealso cref="Event" />
+public static class TokenIssuedSuccessEvent
 {
     /// <summary>
-    /// Event for successful token issuance
+    /// Initializes a new instance of the <see cref="TokenIssuedSuccessEvent"/> class.
     /// </summary>
-    /// <seealso cref="IdentityServer4.Events.Event" />
-    public class TokenIssuedSuccessEvent : Event
+    /// <param name="response">The response.</param>
+    public static Event Create(AuthorizeResponse response) =>
+        new(EventCategories.Token,
+            "Token Issued Success",
+            EventTypes.Success,
+            EventIds.TokenIssuedSuccess,
+            new{
+                ClientId = response.Request.ValidatedClient.GetOrDefault(c => c.ClientId),
+                ClientName = response.Request.ValidatedClient.GetOrDefault(c => c.Client.ClientName),
+                RedirectUri = response.RedirectUri,
+                Endpoint = EndpointNames.Authorize,
+                SubjectId = response.Request.Subject.GetSubjectId(),
+                Scopes = response.Scope,
+                GrantType = response.Request.GrantType,
+                Tokens = GetTokens(response).ToArray()
+            });
+
+    static IEnumerable<Token> GetTokens(AuthorizeResponse response) {
+        if (response.IdentityToken.IsSome) yield return Token.Create(OidcConstants.TokenTypes.IdentityToken, response.IdentityToken.Get());
+        if (response.Code.IsSome) yield return Token.Create(OidcConstants.ResponseTypes.Code, response.Code.Get());
+        if (response.AccessToken.IsSome) yield return Token.Create(OidcConstants.TokenTypes.AccessToken, response.AccessToken.Get());
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TokenIssuedSuccessEvent"/> class.
+    /// </summary>
+    /// <param name="response">The response.</param>
+    /// <param name="request">The request.</param>
+    public static Event Create(TokenResponse response, TokenRequestValidationResult request) =>
+        new(EventCategories.Token,
+            "Token Issued Success",
+            EventTypes.Success,
+            EventIds.TokenIssuedSuccess,
+            new{
+                ClientId = request.ValidatedRequest.ValidatedClient.GetOrDefault(c => c.ClientId),
+                ClientName = request.ValidatedRequest.ValidatedClient.GetOrDefault(c => c.Client.ClientName),
+                Endpoint = EndpointNames.Token,
+                SubjectId = request.ValidatedRequest.Subject.GetSubjectId(),
+                GrantType = request.ValidatedRequest.GrantType,
+                Scopes = request.ValidatedRequest.GrantType switch {
+                    OidcConstants.GrantTypes.RefreshToken      => request.ValidatedRequest.RefreshToken.AccessToken.Scopes.ToSpaceSeparatedString(),
+                    OidcConstants.GrantTypes.AuthorizationCode => request.ValidatedRequest.AuthorizationCode.Get().RequestedScopes.ToSpaceSeparatedString(),
+                    _                                          => request.ValidatedRequest.ValidatedResources.RawScopeValues.ToSpaceSeparatedString()
+                },
+                Tokens = GetTokens(response).ToArray()
+            });
+
+    static IEnumerable<Token> GetTokens(TokenResponse response) {
+        if (response.IdentityToken.IsSome) yield return Token.Create(OidcConstants.TokenTypes.IdentityToken, response.IdentityToken.Get());
+        if (response.RefreshToken.IsSome) yield return Token.Create(OidcConstants.ResponseTypes.Code, response.RefreshToken.Get());
+        yield return Token.Create(OidcConstants.TokenTypes.AccessToken, response.AccessToken);
+    }
+
+    /// <summary>
+    /// Data structure serializing issued tokens
+    /// </summary>
+    public sealed record Token(string TokenType, string TokenValue)
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="TokenIssuedSuccessEvent"/> class.
+        /// Initializes a new instance of the <see cref="Token"/> class.
         /// </summary>
-        /// <param name="response">The response.</param>
-        public TokenIssuedSuccessEvent(AuthorizeResponse response)
-            : this()
-        {
-            ClientId = response.Request.ClientId;
-            ClientName = response.Request.Client.ClientName;
-            RedirectUri = response.RedirectUri;
-            Endpoint = EndpointNames.Authorize;
-            SubjectId = response.Request.Subject.GetSubjectId();
-            Scopes = response.Scope;
-            GrantType = response.Request.GrantType;
-
-            var tokens = new List<Token>();
-            if (response.IdentityToken != null)
-            {
-                tokens.Add(new Token(OidcConstants.TokenTypes.IdentityToken, response.IdentityToken));
-            }
-            if (response.Code != null)
-            {
-                tokens.Add(new Token(OidcConstants.ResponseTypes.Code, response.Code));
-            }
-            if (response.AccessToken != null)
-            {
-                tokens.Add(new Token(OidcConstants.TokenTypes.AccessToken, response.AccessToken));
-            }
-            Tokens = tokens;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TokenIssuedSuccessEvent"/> class.
-        /// </summary>
-        /// <param name="response">The response.</param>
-        /// <param name="request">The request.</param>
-        public TokenIssuedSuccessEvent(TokenResponse response, TokenRequestValidationResult request)
-            : this()
-        {
-            ClientId = request.ValidatedRequest.Client.ClientId;
-            ClientName = request.ValidatedRequest.Client.ClientName;
-            Endpoint = EndpointNames.Token;
-            SubjectId = request.ValidatedRequest.Subject?.GetSubjectId();
-            GrantType = request.ValidatedRequest.GrantType;
-
-            if (GrantType == OidcConstants.GrantTypes.RefreshToken)
-            {
-                Scopes = request.ValidatedRequest.RefreshToken.AccessToken.Scopes.ToSpaceSeparatedString();
-            }
-            else if (GrantType == OidcConstants.GrantTypes.AuthorizationCode)
-            {
-                Scopes = request.ValidatedRequest.AuthorizationCode.RequestedScopes.ToSpaceSeparatedString();
-            }
-            else
-            {
-                Scopes = request.ValidatedRequest.ValidatedResources?.RawScopeValues.ToSpaceSeparatedString();
-            }
-
-            var tokens = new List<Token>();
-            if (response.IdentityToken != null)
-            {
-                tokens.Add(new Token(OidcConstants.TokenTypes.IdentityToken, response.IdentityToken));
-            }
-            if (response.RefreshToken != null)
-            {
-                tokens.Add(new Token(OidcConstants.TokenTypes.RefreshToken, response.RefreshToken));
-            }
-            if (response.AccessToken != null)
-            {
-                tokens.Add(new Token(OidcConstants.TokenTypes.AccessToken, response.AccessToken));
-            }
-            Tokens = tokens;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TokenIssuedSuccessEvent"/> class.
-        /// </summary>
-        protected TokenIssuedSuccessEvent()
-            : base(EventCategories.Token,
-                  "Token Issued Success",
-                  EventTypes.Success,
-                  EventIds.TokenIssuedSuccess)
-        {
-        }
-
-        /// <summary>
-        /// Gets or sets the client identifier.
-        /// </summary>
-        /// <value>
-        /// The client identifier.
-        /// </value>
-        public string ClientId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the name of the client.
-        /// </summary>
-        /// <value>
-        /// The name of the client.
-        /// </value>
-        public string ClientName { get; set; }
-
-        /// <summary>
-        /// Gets or sets the redirect URI.
-        /// </summary>
-        /// <value>
-        /// The redirect URI.
-        /// </value>
-        public string RedirectUri { get; set; }
-
-        /// <summary>
-        /// Gets or sets the endpoint.
-        /// </summary>
-        /// <value>
-        /// The endpoint.
-        /// </value>
-        public string Endpoint { get; set; }
-
-        /// <summary>
-        /// Gets or sets the subject identifier.
-        /// </summary>
-        /// <value>
-        /// The subject identifier.
-        /// </value>
-        public string SubjectId { get; set; }
-
-        /// <summary>
-        /// Gets or sets the scopes.
-        /// </summary>
-        /// <value>
-        /// The scopes.
-        /// </value>
-        public string Scopes { get; set; }
-
-        /// <summary>
-        /// Gets or sets the grant type.
-        /// </summary>
-        /// <value>
-        /// The grant type.
-        /// </value>
-        public string GrantType { get; set; }
-
-        /// <summary>
-        /// Gets or sets the tokens.
-        /// </summary>
-        /// <value>
-        /// The tokens.
-        /// </value>
-        public IEnumerable<Token> Tokens { get; set; }
-
-        /// <summary>
-        /// Data structure serializing issued tokens
-        /// </summary>
-        public class Token
-        {
-            /// <summary>
-            /// Initializes a new instance of the <see cref="Token"/> class.
-            /// </summary>
-            /// <param name="type">The type.</param>
-            /// <param name="value">The value.</param>
-            public Token(string type, string value)
-            {
-                TokenType = type;
-                TokenValue = Obfuscate(value);
-            }
-
-            /// <summary>
-            /// Gets the type of the token.
-            /// </summary>
-            /// <value>
-            /// The type of the token.
-            /// </value>
-            public string TokenType { get; }
-
-            /// <summary>
-            /// Gets the token value.
-            /// </summary>
-            /// <value>
-            /// The token value.
-            /// </value>
-            public string TokenValue { get; }
-        }
+        /// <param name="type">The type.</param>
+        /// <param name="value">The value.</param>
+        public static Token Create(string type, string value) =>
+            new(type, value.Obfuscate());
     }
 }

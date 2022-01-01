@@ -5,13 +5,11 @@
 using IdentityModel;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
-using IdentityServer4.Validation;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
-using System.Threading.Tasks;
-using static LanguageExt.Prelude;
+using IdentityServer4.Models.Contexts;
+using IdentityServer4.Validation.Models;
 
 // ReSharper disable once CheckNamespace
 namespace IdentityServer4.Services
@@ -52,41 +50,34 @@ namespace IdentityServer4.Services
         /// <returns>
         /// Claims for the identity token
         /// </returns>
-        public virtual async Task<IEnumerable<Claim>> GetIdentityTokenClaimsAsync(ClaimsPrincipal subject, ResourceValidationResult resources, bool includeAllIdentityClaims, ValidatedRequest request)
-        {
-            Logger.LogDebug("Getting claims for identity token for subject: {Subject} and client: {ClientId}",
-                subject.GetSubjectId(),
-                request.Client.ClientId);
+        public virtual async Task<IEnumerable<Claim>> GetIdentityTokenClaimsAsync(ClaimsPrincipal subject, ResourceValidationResult resources, bool includeAllIdentityClaims, ValidatedRequest request) {
+            var client = request.ValidatedClient.Get().Client;
+            Logger.LogDebug("Getting claims for identity token for subject: {Subject} and client: {ClientId}", subject.GetSubjectId(), client.ClientId);
 
             var outputClaims = new List<Claim>(GetStandardSubjectClaims(subject));
             outputClaims.AddRange(GetOptionalClaims(subject));
 
             // fetch all identity claims that need to go into the id token
-            if (includeAllIdentityClaims || request.Client.AlwaysIncludeUserClaimsInIdToken)
+            if (includeAllIdentityClaims || client.AlwaysIncludeUserClaimsInIdToken)
             {
                 // filter so we don't ask for claim types that we will eventually filter out
                 var additionalClaimTypes = FilterRequestedClaimTypes(
-                    resources.Resources.IdentityResources
-                                       .SelectMany(identityResource => identityResource.UserClaims)
-                    );
+                    resources.Resources.IdentityResources.SelectMany(identityResource => identityResource.UserClaims)
+                    ).AsArray();
 
-                var context = new ProfileDataRequestContext(
-                    subject,
-                    request.Client,
-                    IdentityServerConstants.ProfileDataCallers.ClaimsProviderIdentityToken,
-                    additionalClaimTypes)
-                {
-                    RequestedResources = resources,
-                    ValidatedRequest = request
-                };
+                var context = new ProfileDataRequestContext(subject,
+                                                            client,
+                                                            IdentityServerConstants.ProfileDataCallers.ClaimsProviderIdentityToken,
+                                                            additionalClaimTypes,
+                                                            resources);
 
-                await Profile.GetProfileDataAsync(context);
+                var issuedClaims = await Profile.GetIssuedClaims(context);
 
-                outputClaims.AddRange(FilterProtocolClaims(context.IssuedClaims));
+                outputClaims.AddRange(FilterProtocolClaims(issuedClaims));
             }
             else
             {
-                Logger.LogDebug("In addition to an id_token, an access_token was requested. No claims other than sub are included in the id_token. To obtain more user claims, either use the user info endpoint or set AlwaysIncludeUserClaimsInIdToken on the client configuration.");
+                Logger.LogDebug("In addition to an id_token, an access_token was requested. No claims other than sub are included in the id_token. To obtain more user claims, either use the user info endpoint or set AlwaysIncludeUserClaimsInIdToken on the client configuration");
             }
 
             return outputClaims;
@@ -136,7 +127,7 @@ namespace IdentityServer4.Services
             }
 
             // add scopes (filter offline_access)
-            // we use the ScopeValues collection rather than the Resources.Scopes because we support dynamic scope values 
+            // we use the ScopeValues collection rather than the Resources.Scopes because we support dynamic scope values
             // from the request, so this issues those in the token.
             foreach (var scope in resourceResult.RawScopeValues.Where(x => x != IdentityServerConstants.StandardScopes.OfflineAccess))
             {
@@ -174,9 +165,9 @@ namespace IdentityServer4.Services
                     ValidatedRequest = request
                 };
 
-                await Profile.GetProfileDataAsync(context);
+                var issuedClaims = await Profile.GetIssuedClaims(context);
 
-                outputClaims.AddRange(FilterProtocolClaims(context.IssuedClaims));
+                outputClaims.AddRange(FilterProtocolClaims(issuedClaims));
             }
 
             return outputClaims;

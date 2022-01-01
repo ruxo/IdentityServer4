@@ -3,6 +3,7 @@
 
 
 using System.Collections.Generic;
+using IdentityServer4.Validation.Models;
 
 namespace IdentityServer4.Validation
 {
@@ -11,6 +12,7 @@ namespace IdentityServer4.Validation
     /// </summary>
     public class ValidatedEndSessionRequest : ValidatedRequest
     {
+        public ValidatedEndSessionRequest(){}
         /// <summary>
         /// Gets a value indicating whether this instance is authenticated.
         /// </summary>
@@ -26,7 +28,7 @@ namespace IdentityServer4.Validation
         /// The post-logout URI.
         /// </value>
         public string PostLogOutUri { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the state.
         /// </summary>

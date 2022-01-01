@@ -4,6 +4,7 @@
 
 using IdentityServer4.Models;
 using System.Threading.Tasks;
+using LanguageExt;
 
 namespace IdentityServer4.Stores
 {
@@ -25,6 +26,6 @@ namespace IdentityServer4.Stores
         /// </summary>
         /// <param name="id">The identifier.</param>
         /// <returns></returns>
-        Task<Message<TModel>> ReadAsync(string id);
+        Task<Option<Message<TModel>>> ReadAsync(string id);
     }
 }

@@ -34,7 +34,7 @@ namespace IdentityServer4.Stores
             {
                 _repository.Add(new InMemoryDeviceAuthorization(deviceCode, userCode, data));
             }
-            
+
             return Task.CompletedTask;
         }
 
@@ -42,21 +42,22 @@ namespace IdentityServer4.Stores
         /// Finds device authorization by user code.
         /// </summary>
         /// <param name="userCode">The user code.</param>
-        public OptionAsync<DeviceCode> FindByUserCodeAsync(string userCode) => FindDeviceCode(x => x.UserCode == userCode);
+        public Task<Option<DeviceCode>> FindByUserCodeAsync(string userCode) => FindDeviceCode(x => x.UserCode == userCode);
 
         /// <summary>
         /// Finds device authorization by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
-        public OptionAsync<DeviceCode> FindByDeviceCodeAsync(string deviceCode) => FindDeviceCode(x => x.DeviceCode == deviceCode);
+        public Task<Option<DeviceCode>> FindByDeviceCodeAsync(string deviceCode) => FindDeviceCode(x => x.DeviceCode == deviceCode);
 
-        OptionAsync<InMemoryDeviceAuthorization> FindDeviceAuthorization(Func<InMemoryDeviceAuthorization, bool> predicate)
+        Task<Option<InMemoryDeviceAuthorization>> FindDeviceAuthorization(Func<InMemoryDeviceAuthorization, bool> predicate)
         {
             lock (_repository)
-                return OptionalAsync(Task.FromResult(_repository.FirstOrDefault(predicate)!));
+                return Task.FromResult(Optional(_repository.FirstOrDefault(predicate)!));
         }
-        
-        OptionAsync<DeviceCode> FindDeviceCode(Func<InMemoryDeviceAuthorization, bool> predicate) => FindDeviceAuthorization(predicate).Map(a => a.Data);
+
+        Task<Option<DeviceCode>> FindDeviceCode(Func<InMemoryDeviceAuthorization, bool> predicate) =>
+            FindDeviceAuthorization(predicate).MapT(a => a.Data);
 
         Task UpdateDeviceAuthorization(Func<InMemoryDeviceAuthorization, bool> predicate,
             Action<InMemoryDeviceAuthorization> handler)
@@ -85,7 +86,7 @@ namespace IdentityServer4.Stores
         // ReSharper disable once InconsistentlySynchronizedField
         public Task RemoveByDeviceCodeAsync(string deviceCode) => UpdateDeviceAuthorization(x => x.DeviceCode == deviceCode, x => _repository.Remove(x));
 
-        private class InMemoryDeviceAuthorization
+        sealed class InMemoryDeviceAuthorization
         {
             public InMemoryDeviceAuthorization(string deviceCode, string userCode, DeviceCode data)
             {

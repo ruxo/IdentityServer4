@@ -9,69 +9,67 @@ using IdentityServer4.Validation;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 using LanguageExt;
+using static LanguageExt.Prelude;
 
-namespace IdentityServer4.Stores
+namespace IdentityServer4.Stores;
+
+/// <summary>
+/// Client store decorator for running runtime configuration validation checks
+/// </summary>
+public class ValidatingClientStore<T> : IClientStore
+    where T : IClientStore
 {
+    readonly IClientStore _inner;
+    readonly IClientConfigurationValidator _validator;
+    readonly IEventService _events;
+    readonly ILogger<ValidatingClientStore<T>> _logger;
+    readonly string _validatorType;
+
     /// <summary>
-    /// Client store decorator for running runtime configuration validation checks
+    /// Initializes a new instance of the <see cref="ValidatingClientStore{T}" /> class.
     /// </summary>
-    public class ValidatingClientStore<T> : IClientStore
-        where T : IClientStore
+    /// <param name="inner">The inner.</param>
+    /// <param name="validator">The validator.</param>
+    /// <param name="events">The events.</param>
+    /// <param name="logger">The logger.</param>
+    public ValidatingClientStore(T inner, IClientConfigurationValidator validator, IEventService events, ILogger<ValidatingClientStore<T>> logger)
     {
-        readonly IClientStore _inner;
-        readonly IClientConfigurationValidator _validator;
-        readonly IEventService _events;
-        readonly ILogger<ValidatingClientStore<T>> _logger;
-        readonly string _validatorType;
+        _inner     = inner;
+        _validator = validator;
+        _events    = events;
+        _logger    = logger;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ValidatingClientStore{T}" /> class.
-        /// </summary>
-        /// <param name="inner">The inner.</param>
-        /// <param name="validator">The validator.</param>
-        /// <param name="events">The events.</param>
-        /// <param name="logger">The logger.</param>
-        public ValidatingClientStore(T inner, IClientConfigurationValidator validator, IEventService events, ILogger<ValidatingClientStore<T>> logger)
-        {
-            _inner = inner;
-            _validator = validator;
-            _events = events;
-            _logger = logger;
+        _validatorType = validator.GetType().FullName!;
+    }
 
-            _validatorType = validator.GetType().FullName!;
-        }
+    /// <summary>
+    /// Finds a client by id (and runs the validation logic)
+    /// </summary>
+    /// <param name="clientId">The client id</param>
+    /// <returns>
+    /// The client or an InvalidOperationException
+    /// </returns>
+    public async Task<Option<Client>> FindClientByIdAsync(string clientId)
+    {
+        var c = await _inner.FindClientByIdAsync(clientId);
 
-        /// <summary>
-        /// Finds a client by id (and runs the validation logic)
-        /// </summary>
-        /// <param name="clientId">The client id</param>
-        /// <returns>
-        /// The client or an InvalidOperationException
-        /// </returns>
-        public async OptionAsync<Client> FindClientByIdAsync(string clientId)
-        {
-            var client = await _inner.FindClientByIdAsync(clientId);
+        async Task<Option<Client>> validate(Client client) {
+            _logger.LogTrace("Calling into client configuration validator: {ValidatorType}", _validatorType);
 
-            if (client != null)
-            {
-                _logger.LogTrace("Calling into client configuration validator: {validatorType}", _validatorType);
+            var context = new ClientConfigurationValidationContext(client);
+            await _validator.ValidateAsync(context);
 
-                var context = new ClientConfigurationValidationContext(client);
-                await _validator.ValidateAsync(context);
-
-                if (context.IsValid)
-                {
-                    _logger.LogDebug("client configuration validation for client {clientId} succeeded.", client.ClientId);
-                    return client;
-                }
-
-                _logger.LogError("Invalid client configuration for client {clientId}: {errorMessage}", client.ClientId, context.ErrorMessage);
-                await _events.RaiseAsync(new InvalidClientConfigurationEvent(client, context.ErrorMessage));
-                    
-                return null;
+            if (context.IsValid) {
+                _logger.LogDebug("client configuration validation for client {ClientId} succeeded", client.ClientId);
+                return client;
             }
 
-            return null;
+            _logger.LogError("Invalid client configuration for client {ClientId}: {ErrorMessage}", client.ClientId, context.ErrorMessage);
+            await _events.RaiseAsync(new InvalidClientConfigurationEvent(client, context.ErrorMessage));
+
+            return None;
         }
+
+        return await Task.FromResult(c).BindT(validate);
     }
 }

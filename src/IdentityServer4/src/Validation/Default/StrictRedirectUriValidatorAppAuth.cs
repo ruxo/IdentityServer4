@@ -5,6 +5,7 @@
 using IdentityServer4.Models;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace IdentityServer4.Validation
@@ -15,7 +16,7 @@ namespace IdentityServer4.Validation
     /// <seealso cref="IdentityServer4.Validation.StrictRedirectUriValidator" />
     public class StrictRedirectUriValidatorAppAuth : StrictRedirectUriValidator
     {
-        private readonly ILogger _logger;
+        readonly ILogger _logger;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="StrictRedirectUriValidatorAppAuth"/> class.

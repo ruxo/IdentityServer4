@@ -2,857 +2,680 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System;
+using System.Diagnostics.Contracts;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
 using IdentityModel;
-using IdentityServer4.Configuration;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Events;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
 using IdentityServer4.Stores;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using IdentityServer4.Logging.Models;
+using IdentityServer4.Validation.Contexts;
+using IdentityServer4.Validation.Models;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Logging;
+using ValidationResult = LanguageExt.Either<IdentityServer4.Validation.Models.ErrorWithCustomResponse,LanguageExt.Unit>;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Default;
+
+class TokenRequestValidator : ITokenRequestValidator
 {
-    internal class TokenRequestValidator : ITokenRequestValidator
+    readonly IdentityServerOptions options;
+    readonly IAuthorizationCodeStore authorizationCodeStore;
+    readonly ExtensionGrantValidator extensionGrantValidator;
+    readonly ICustomTokenRequestValidator customRequestValidator;
+    readonly IResourceValidator resourceValidator;
+    readonly IResourceStore resourceStore;
+    readonly IRefreshTokenService refreshTokenService;
+    readonly IEventService events;
+    readonly IResourceOwnerPasswordValidator resourceOwnerValidator;
+    readonly IProfileService profile;
+    readonly IDeviceCodeValidator deviceCodeValidator;
+    readonly ISystemClock clock;
+    readonly ILogger logger;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TokenRequestValidator" /> class.
+    /// </summary>
+    /// <param name="options">The options.</param>
+    /// <param name="authorizationCodeStore">The authorization code store.</param>
+    /// <param name="resourceOwnerValidator">The resource owner validator.</param>
+    /// <param name="profile">The profile.</param>
+    /// <param name="deviceCodeValidator">The device code validator.</param>
+    /// <param name="extensionGrantValidator">The extension grant validator.</param>
+    /// <param name="customRequestValidator">The custom request validator.</param>
+    /// <param name="resourceValidator">The resource validator.</param>
+    /// <param name="resourceStore">The resource store.</param>
+    /// <param name="refreshTokenService"></param>
+    /// <param name="events">The events.</param>
+    /// <param name="clock">The clock.</param>
+    /// <param name="logger">The logger.</param>
+    public TokenRequestValidator(IdentityServerOptions           options,
+                                 IAuthorizationCodeStore         authorizationCodeStore,
+                                 IResourceOwnerPasswordValidator resourceOwnerValidator,
+                                 IProfileService                 profile,
+                                 IDeviceCodeValidator            deviceCodeValidator,
+                                 ExtensionGrantValidator         extensionGrantValidator,
+                                 ICustomTokenRequestValidator    customRequestValidator,
+                                 IResourceValidator              resourceValidator,
+                                 IResourceStore                  resourceStore,
+                                 IRefreshTokenService            refreshTokenService,
+                                 IEventService                   events,
+                                 ISystemClock                    clock,
+                                 ILogger<TokenRequestValidator>  logger)
     {
-        private readonly IdentityServerOptions _options;
-        private readonly IAuthorizationCodeStore _authorizationCodeStore;
-        private readonly ExtensionGrantValidator _extensionGrantValidator;
-        private readonly ICustomTokenRequestValidator _customRequestValidator;
-        private readonly IResourceValidator _resourceValidator;
-        private readonly IResourceStore _resourceStore;
-        private readonly ITokenValidator _tokenValidator;
-        private readonly IRefreshTokenService _refreshTokenService;
-        private readonly IEventService _events;
-        private readonly IResourceOwnerPasswordValidator _resourceOwnerValidator;
-        private readonly IProfileService _profile;
-        private readonly IDeviceCodeValidator _deviceCodeValidator;
-        private readonly ISystemClock _clock;
-        private readonly ILogger _logger;
-
-        private ValidatedTokenRequest _validatedRequest;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TokenRequestValidator" /> class.
-        /// </summary>
-        /// <param name="options">The options.</param>
-        /// <param name="authorizationCodeStore">The authorization code store.</param>
-        /// <param name="resourceOwnerValidator">The resource owner validator.</param>
-        /// <param name="profile">The profile.</param>
-        /// <param name="deviceCodeValidator">The device code validator.</param>
-        /// <param name="extensionGrantValidator">The extension grant validator.</param>
-        /// <param name="customRequestValidator">The custom request validator.</param>
-        /// <param name="resourceValidator">The resource validator.</param>
-        /// <param name="resourceStore">The resource store.</param>
-        /// <param name="tokenValidator">The token validator.</param>
-        /// <param name="refreshTokenService"></param>
-        /// <param name="events">The events.</param>
-        /// <param name="clock">The clock.</param>
-        /// <param name="logger">The logger.</param>
-        public TokenRequestValidator(IdentityServerOptions options, 
-            IAuthorizationCodeStore authorizationCodeStore, 
-            IResourceOwnerPasswordValidator resourceOwnerValidator, 
-            IProfileService profile, 
-            IDeviceCodeValidator deviceCodeValidator, 
-            ExtensionGrantValidator extensionGrantValidator, 
-            ICustomTokenRequestValidator customRequestValidator,
-            IResourceValidator resourceValidator,
-            IResourceStore resourceStore,
-            ITokenValidator tokenValidator, 
-            IRefreshTokenService refreshTokenService,
-            IEventService events, 
-            ISystemClock clock, 
-            ILogger<TokenRequestValidator> logger)
-        {
-            _logger = logger;
-            _options = options;
-            _clock = clock;
-            _authorizationCodeStore = authorizationCodeStore;
-            _resourceOwnerValidator = resourceOwnerValidator;
-            _profile = profile;
-            _deviceCodeValidator = deviceCodeValidator;
-            _extensionGrantValidator = extensionGrantValidator;
-            _customRequestValidator = customRequestValidator;
-            _resourceValidator = resourceValidator;
-            _resourceStore = resourceStore;
-            _tokenValidator = tokenValidator;
-            _refreshTokenService = refreshTokenService;
-            _events = events;
-        }
-
-        /// <summary>
-        /// Validates the request.
-        /// </summary>
-        /// <param name="parameters">The parameters.</param>
-        /// <param name="clientValidationResult">The client validation result.</param>
-        /// <returns></returns>
-        /// <exception cref="System.ArgumentNullException">
-        /// parameters
-        /// or
-        /// client
-        /// </exception>
-        public async Task<TokenRequestValidationResult> ValidateRequestAsync(NameValueCollection parameters, ClientSecretValidationResult clientValidationResult)
-        {
-            _logger.LogDebug("Start token request validation");
-
-            _validatedRequest = new ValidatedTokenRequest
-            {
-                Raw = parameters ?? throw new ArgumentNullException(nameof(parameters)),
-                Options = _options
-            };
-
-            if (clientValidationResult == null) throw new ArgumentNullException(nameof(clientValidationResult));
-
-            _validatedRequest.SetClient(clientValidationResult.Client, clientValidationResult.Secret, clientValidationResult.Confirmation);
-
-            /////////////////////////////////////////////
-            // check client protocol type
-            /////////////////////////////////////////////
-            if (_validatedRequest.Client.ProtocolType != IdentityServerConstants.ProtocolTypes.OpenIdConnect)
-            {
-                LogError("Invalid protocol type for client",
-                    new
-                    {
-                        clientId = _validatedRequest.Client.ClientId,
-                        expectedProtocolType = IdentityServerConstants.ProtocolTypes.OpenIdConnect,
-                        actualProtocolType = _validatedRequest.Client.ProtocolType
-                    });
-
-                return Invalid(OidcConstants.TokenErrors.InvalidClient);
-            }
-
-            /////////////////////////////////////////////
-            // check grant type
-            /////////////////////////////////////////////
-            var grantType = parameters.Get(OidcConstants.TokenRequest.GrantType);
-            if (grantType.IsMissing())
-            {
-                LogError("Grant type is missing");
-                return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
-            }
-
-            if (grantType.Length > _options.InputLengthRestrictions.GrantType)
-            {
-                LogError("Grant type is too long");
-                return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
-            }
-
-            _validatedRequest.GrantType = grantType;
-
-            switch (grantType)
-            {
-                case OidcConstants.GrantTypes.AuthorizationCode:
-                    return await RunValidationAsync(ValidateAuthorizationCodeRequestAsync, parameters);
-                case OidcConstants.GrantTypes.ClientCredentials:
-                    return await RunValidationAsync(ValidateClientCredentialsRequestAsync, parameters);
-                case OidcConstants.GrantTypes.Password:
-                    return await RunValidationAsync(ValidateResourceOwnerCredentialRequestAsync, parameters);
-                case OidcConstants.GrantTypes.RefreshToken:
-                    return await RunValidationAsync(ValidateRefreshTokenRequestAsync, parameters);
-                case OidcConstants.GrantTypes.DeviceCode:
-                    return await RunValidationAsync(ValidateDeviceCodeRequestAsync, parameters);
-                default:
-                    return await RunValidationAsync(ValidateExtensionGrantRequestAsync, parameters);
-            }
-        }
-
-        private async Task<TokenRequestValidationResult> RunValidationAsync(Func<NameValueCollection, Task<TokenRequestValidationResult>> validationFunc, NameValueCollection parameters)
-        {
-            // run standard validation
-            var result = await validationFunc(parameters);
-            if (result.IsError)
-            {
-                return result;
-            }
-
-            // run custom validation
-            _logger.LogTrace("Calling into custom request validator: {type}", _customRequestValidator.GetType().FullName);
-
-            var customValidationContext = new CustomTokenRequestValidationContext { Result = result };
-            await _customRequestValidator.ValidateAsync(customValidationContext);
-
-            if (customValidationContext.Result.IsError)
-            {
-                if (customValidationContext.Result.Error.IsPresent())
-                {
-                    LogError("Custom token request validator", new { error = customValidationContext.Result.Error });
-                }
-                else
-                {
-                    LogError("Custom token request validator error");
-                }
-
-                return customValidationContext.Result;
-            }
-
-            LogSuccess();
-            return customValidationContext.Result;
-        }
-
-        private async Task<TokenRequestValidationResult> ValidateAuthorizationCodeRequestAsync(NameValueCollection parameters)
-        {
-            _logger.LogDebug("Start validation of authorization code token request");
-
-            /////////////////////////////////////////////
-            // check if client is authorized for grant type
-            /////////////////////////////////////////////
-            if (!_validatedRequest.Client.AllowedGrantTypes.ToList().Contains(GrantType.AuthorizationCode) &&
-                !_validatedRequest.Client.AllowedGrantTypes.ToList().Contains(GrantType.Hybrid))
-            {
-                LogError("Client not authorized for code flow");
-                return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
-            }
-
-            /////////////////////////////////////////////
-            // validate authorization code
-            /////////////////////////////////////////////
-            var code = parameters.Get(OidcConstants.TokenRequest.Code);
-            if (code.IsMissing())
-            {
-                LogError("Authorization code is missing");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            if (code.Length > _options.InputLengthRestrictions.AuthorizationCode)
-            {
-                LogError("Authorization code is too long");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            _validatedRequest.AuthorizationCodeHandle = code;
-
-            var authZcode = await _authorizationCodeStore.GetAuthorizationCodeAsync(code);
-            if (authZcode == null)
-            {
-                LogError("Invalid authorization code", new { code });
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-            
-            /////////////////////////////////////////////
-            // validate client binding
-            /////////////////////////////////////////////
-            if (authZcode.ClientId != _validatedRequest.Client.ClientId)
-            {
-                LogError("Client is trying to use a code from a different client", new { clientId = _validatedRequest.Client.ClientId, codeClient = authZcode.ClientId });
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            // remove code from store
-            // todo: set to consumed in the future?
-            await _authorizationCodeStore.RemoveAuthorizationCodeAsync(code);
-
-            if (authZcode.CreationTime.HasExceeded(authZcode.Lifetime, _clock.UtcNow.UtcDateTime))
-            {
-                LogError("Authorization code expired", new { code });
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            /////////////////////////////////////////////
-            // populate session id
-            /////////////////////////////////////////////
-            if (authZcode.SessionId.IsPresent())
-            {
-                _validatedRequest.SessionId = authZcode.SessionId;
-            }
-
-            /////////////////////////////////////////////
-            // validate code expiration
-            /////////////////////////////////////////////
-            if (authZcode.CreationTime.HasExceeded(_validatedRequest.Client.AuthorizationCodeLifetime, _clock.UtcNow.UtcDateTime))
-            {
-                LogError("Authorization code is expired");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            _validatedRequest.AuthorizationCode = authZcode;
-            _validatedRequest.Subject = authZcode.Subject;
-
-            /////////////////////////////////////////////
-            // validate redirect_uri
-            /////////////////////////////////////////////
-            var redirectUri = parameters.Get(OidcConstants.TokenRequest.RedirectUri);
-            if (redirectUri.IsMissing())
-            {
-                LogError("Redirect URI is missing");
-                return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
-            }
-
-            if (redirectUri.Equals(_validatedRequest.AuthorizationCode.RedirectUri, StringComparison.Ordinal) == false)
-            {
-                LogError("Invalid redirect_uri", new { redirectUri, expectedRedirectUri = _validatedRequest.AuthorizationCode.RedirectUri });
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            /////////////////////////////////////////////
-            // validate scopes are present
-            /////////////////////////////////////////////
-            if (_validatedRequest.AuthorizationCode.RequestedScopes == null ||
-                !_validatedRequest.AuthorizationCode.RequestedScopes.Any())
-            {
-                LogError("Authorization code has no associated scopes");
-                return Invalid(OidcConstants.TokenErrors.InvalidRequest);
-            }
-
-            /////////////////////////////////////////////
-            // validate PKCE parameters
-            /////////////////////////////////////////////
-            var codeVerifier = parameters.Get(OidcConstants.TokenRequest.CodeVerifier);
-            if (_validatedRequest.Client.RequirePkce || _validatedRequest.AuthorizationCode.CodeChallenge.IsPresent())
-            {
-                _logger.LogDebug("Client required a proof key for code exchange. Starting PKCE validation");
-
-                var proofKeyResult = ValidateAuthorizationCodeWithProofKeyParameters(codeVerifier, _validatedRequest.AuthorizationCode);
-                if (proofKeyResult.IsError)
-                {
-                    return proofKeyResult;
-                }
-
-                _validatedRequest.CodeVerifier = codeVerifier;
-            }
-            else
-            {
-                if (codeVerifier.IsPresent())
-                {
-                    LogError("Unexpected code_verifier: {codeVerifier}. This happens when the client is trying to use PKCE, but it is not enabled. Set RequirePkce to true.", codeVerifier);
-                    return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-                }
-            }
-
-            /////////////////////////////////////////////
-            // make sure user is enabled
-            /////////////////////////////////////////////
-            var isActiveCtx = new IsActiveContext(_validatedRequest.AuthorizationCode.Subject, _validatedRequest.Client, IdentityServerConstants.ProfileIsActiveCallers.AuthorizationCodeValidation);
-            await _profile.IsActiveAsync(isActiveCtx);
-
-            if (isActiveCtx.IsActive == false)
-            {
-                LogError("User has been disabled", new { subjectId = _validatedRequest.AuthorizationCode.Subject.GetSubjectId() });
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            _logger.LogDebug("Validation of authorization code token request success");
-
-            return Valid();
-        }
-
-        private async Task<TokenRequestValidationResult> ValidateClientCredentialsRequestAsync(NameValueCollection parameters)
-        {
-            _logger.LogDebug("Start client credentials token request validation");
-
-            /////////////////////////////////////////////
-            // check if client is authorized for grant type
-            /////////////////////////////////////////////
-            if (!_validatedRequest.Client.AllowedGrantTypes.ToList().Contains(GrantType.ClientCredentials))
-            {
-                LogError("Client not authorized for client credentials flow, check the AllowedGrantTypes setting", new { clientId = _validatedRequest.Client.ClientId });
-                return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
-            }
-
-            /////////////////////////////////////////////
-            // check if client is allowed to request scopes
-            /////////////////////////////////////////////
-            if (!await ValidateRequestedScopesAsync(parameters, ignoreImplicitIdentityScopes: true, ignoreImplicitOfflineAccess: true))
-            {
-                return Invalid(OidcConstants.TokenErrors.InvalidScope);
-            }
-
-            if (_validatedRequest.ValidatedResources.Resources.IdentityResources.Any())
-            {
-                LogError("Client cannot request OpenID scopes in client credentials flow", new { clientId = _validatedRequest.Client.ClientId });
-                return Invalid(OidcConstants.TokenErrors.InvalidScope);
-            }
-
-            if (_validatedRequest.ValidatedResources.Resources.OfflineAccess)
-            {
-                LogError("Client cannot request a refresh token in client credentials flow", new { clientId = _validatedRequest.Client.ClientId });
-                return Invalid(OidcConstants.TokenErrors.InvalidScope);
-            }
-
-            _logger.LogDebug("{clientId} credentials token request validation success", _validatedRequest.Client.ClientId);
-            return Valid();
-        }
-
-        private async Task<TokenRequestValidationResult> ValidateResourceOwnerCredentialRequestAsync(NameValueCollection parameters)
-        {
-            _logger.LogDebug("Start resource owner password token request validation");
-
-            /////////////////////////////////////////////
-            // check if client is authorized for grant type
-            /////////////////////////////////////////////
-            if (!_validatedRequest.Client.AllowedGrantTypes.Contains(GrantType.ResourceOwnerPassword))
-            {
-                LogError("Client not authorized for resource owner flow, check the AllowedGrantTypes setting", new { client_id = _validatedRequest.Client.ClientId });
-                return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
-            }
-
-            /////////////////////////////////////////////
-            // check if client is allowed to request scopes
-            /////////////////////////////////////////////
-            if (!(await ValidateRequestedScopesAsync(parameters)))
-            {
-                return Invalid(OidcConstants.TokenErrors.InvalidScope);
-            }
-
-            /////////////////////////////////////////////
-            // check resource owner credentials
-            /////////////////////////////////////////////
-            var userName = parameters.Get(OidcConstants.TokenRequest.UserName);
-            var password = parameters.Get(OidcConstants.TokenRequest.Password);
-
-            if (userName.IsMissing())
-            {
-                LogError("Username is missing");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            if (password.IsMissing())
-            {
-                password = "";
-            }
-
-            if (userName.Length > _options.InputLengthRestrictions.UserName ||
-                password.Length > _options.InputLengthRestrictions.Password)
-            {
-                LogError("Username or password too long");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            _validatedRequest.UserName = userName;
-
-
-            /////////////////////////////////////////////
-            // authenticate user
-            /////////////////////////////////////////////
-            var resourceOwnerContext = new ResourceOwnerPasswordValidationContext
-            {
-                UserName = userName,
-                Password = password,
-                Request = _validatedRequest
-            };
-            await _resourceOwnerValidator.ValidateAsync(resourceOwnerContext);
-
-            if (resourceOwnerContext.Result.IsError)
-            {
-                // protect against bad validator implementations
-                resourceOwnerContext.Result.Error ??= OidcConstants.TokenErrors.InvalidGrant;
-
-                if (resourceOwnerContext.Result.Error == OidcConstants.TokenErrors.UnsupportedGrantType)
-                {
-                    LogError("Resource owner password credential grant type not supported");
-                    await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, "password grant type not supported", resourceOwnerContext.Request.Client.ClientId);
-
-                    return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType, customResponse: resourceOwnerContext.Result.CustomResponse);
-                }
-
-                var errorDescription = "invalid_username_or_password";
-
-                if (resourceOwnerContext.Result.ErrorDescription.IsPresent())
-                {
-                    errorDescription = resourceOwnerContext.Result.ErrorDescription;
-                }
-
-                LogInformation("User authentication failed: ", errorDescription ?? resourceOwnerContext.Result.Error);
-                await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, errorDescription, resourceOwnerContext.Request.Client.ClientId);
-
-                return Invalid(resourceOwnerContext.Result.Error, errorDescription, resourceOwnerContext.Result.CustomResponse);
-            }
-
-            if (resourceOwnerContext.Result.Subject == null)
-            {
-                var error = "User authentication failed: no principal returned";
-                LogError(error);
-                await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, error, resourceOwnerContext.Request.Client.ClientId);
-
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            /////////////////////////////////////////////
-            // make sure user is enabled
-            /////////////////////////////////////////////
-            var isActiveCtx = new IsActiveContext(resourceOwnerContext.Result.Subject, _validatedRequest.Client, IdentityServerConstants.ProfileIsActiveCallers.ResourceOwnerValidation);
-            await _profile.IsActiveAsync(isActiveCtx);
-
-            if (isActiveCtx.IsActive == false)
-            {
-                LogError("User has been disabled", new { subjectId = resourceOwnerContext.Result.Subject.GetSubjectId() });
-                await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, "user is inactive", resourceOwnerContext.Request.Client.ClientId);
-
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            _validatedRequest.UserName = userName;
-            _validatedRequest.Subject = resourceOwnerContext.Result.Subject;
-
-            await RaiseSuccessfulResourceOwnerAuthenticationEventAsync(userName, resourceOwnerContext.Result.Subject.GetSubjectId(), resourceOwnerContext.Request.Client.ClientId);
-            _logger.LogDebug("Resource owner password token request validation success.");
-            return Valid(resourceOwnerContext.Result.CustomResponse);
-        }
-
-        private async Task<TokenRequestValidationResult> ValidateRefreshTokenRequestAsync(NameValueCollection parameters)
-        {
-            _logger.LogDebug("Start validation of refresh token request");
-
-            var refreshTokenHandle = parameters.Get(OidcConstants.TokenRequest.RefreshToken);
-            if (refreshTokenHandle.IsMissing())
-            {
-                LogError("Refresh token is missing");
-                return Invalid(OidcConstants.TokenErrors.InvalidRequest);
-            }
-
-            if (refreshTokenHandle.Length > _options.InputLengthRestrictions.RefreshToken)
-            {
-                LogError("Refresh token too long");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            var result = await _refreshTokenService.ValidateRefreshTokenAsync(refreshTokenHandle, _validatedRequest.Client);
-
-            if (result.IsError)
-            {
-                LogWarning("Refresh token validation failed. aborting");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            _validatedRequest.RefreshToken = result.RefreshToken;
-            _validatedRequest.RefreshTokenHandle = refreshTokenHandle;
-            _validatedRequest.Subject = result.RefreshToken.Subject;
-
-            _logger.LogDebug("Validation of refresh token request success");
-            // todo: more logging - similar to TokenValidator before
-            
-            return Valid();
-        }
-
-        private async Task<TokenRequestValidationResult> ValidateDeviceCodeRequestAsync(NameValueCollection parameters)
-        {
-            _logger.LogDebug("Start validation of device code request");
-
-            /////////////////////////////////////////////
-            // check if client is authorized for grant type
-            /////////////////////////////////////////////
-            if (!_validatedRequest.Client.AllowedGrantTypes.ToList().Contains(GrantType.DeviceFlow))
-            {
-                LogError("Client not authorized for device flow");
-                return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
-            }
-
-            /////////////////////////////////////////////
-            // validate device code parameter
-            /////////////////////////////////////////////
-            var deviceCode = parameters.Get(OidcConstants.TokenRequest.DeviceCode);
-            if (deviceCode.IsMissing())
-            {
-                LogError("Device code is missing");
-                return Invalid(OidcConstants.TokenErrors.InvalidRequest);
-            }
-
-            if (deviceCode.Length > _options.InputLengthRestrictions.DeviceCode)
-            {
-                LogError("Device code too long");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            /////////////////////////////////////////////
-            // validate device code
-            /////////////////////////////////////////////
-            var deviceCodeContext = new DeviceCodeValidationContext { DeviceCode = deviceCode, Request = _validatedRequest };
-            await _deviceCodeValidator.ValidateAsync(deviceCodeContext);
-
-            if (deviceCodeContext.Result.IsError) return deviceCodeContext.Result;
-
-            _logger.LogDebug("Validation of authorization code token request success");
-
-            return Valid();
-        }
-
-        private async Task<TokenRequestValidationResult> ValidateExtensionGrantRequestAsync(NameValueCollection parameters)
-        {
-            _logger.LogDebug("Start validation of custom grant token request");
-
-            /////////////////////////////////////////////
-            // check if client is allowed to use grant type
-            /////////////////////////////////////////////
-            if (!_validatedRequest.Client.AllowedGrantTypes.Contains(_validatedRequest.GrantType))
-            {
-                LogError("Client does not have the custom grant type in the allowed list, therefore requested grant is not allowed", new { clientId = _validatedRequest.Client.ClientId });
-                return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
-            }
-
-            /////////////////////////////////////////////
-            // check if a validator is registered for the grant type
-            /////////////////////////////////////////////
-            if (!_extensionGrantValidator.GetAvailableGrantTypes().Contains(_validatedRequest.GrantType, StringComparer.Ordinal))
-            {
-                LogError("No validator is registered for the grant type", new { grantType = _validatedRequest.GrantType });
-                return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
-            }
-
-            /////////////////////////////////////////////
-            // check if client is allowed to request scopes
-            /////////////////////////////////////////////
-            if (!await ValidateRequestedScopesAsync(parameters))
-            {
-                return Invalid(OidcConstants.TokenErrors.InvalidScope);
-            }
-
-            /////////////////////////////////////////////
-            // validate custom grant type
-            /////////////////////////////////////////////
-            var result = await _extensionGrantValidator.ValidateAsync(_validatedRequest);
-
-            if (result == null)
-            {
-                LogError("Invalid extension grant");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            if (result.IsError)
-            {
-                if (result.Error.IsPresent())
-                {
-                    LogError("Invalid extension grant", new { error = result.Error });
-                    return Invalid(result.Error, result.ErrorDescription, result.CustomResponse);
-                }
-                else
-                {
-                    LogError("Invalid extension grant");
-                    return Invalid(OidcConstants.TokenErrors.InvalidGrant, customResponse: result.CustomResponse);
-                }
-            }
-
-            if (result.Subject != null)
-            {
-                /////////////////////////////////////////////
-                // make sure user is enabled
-                /////////////////////////////////////////////
-                var isActiveCtx = new IsActiveContext(
-                    result.Subject,
-                    _validatedRequest.Client,
-                    IdentityServerConstants.ProfileIsActiveCallers.ExtensionGrantValidation);
-
-                await _profile.IsActiveAsync(isActiveCtx);
-
-                if (isActiveCtx.IsActive == false)
-                {
-                    // todo: raise event?
-
-                    LogError("User has been disabled", new { subjectId = result.Subject.GetSubjectId() });
-                    return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-                }
-
-                _validatedRequest.Subject = result.Subject;
-            }
-
-            _logger.LogDebug("Validation of extension grant token request success");
-            return Valid(result.CustomResponse);
-        }
-
-        // todo: do we want to rework the semantics of these ignore params?
-        // also seems like other workflows other than CC clients can omit scopes?
-        private async Task<bool> ValidateRequestedScopesAsync(NameValueCollection parameters, bool ignoreImplicitIdentityScopes = false, bool ignoreImplicitOfflineAccess = false)
-        {
-            var scopes = parameters.Get(OidcConstants.TokenRequest.Scope);
-            if (scopes.IsMissing())
-            {
-                _logger.LogTrace("Client provided no scopes - checking allowed scopes list");
-
-                if (!_validatedRequest.Client.AllowedScopes.IsNullOrEmpty())
-                {
-                    // this finds all the scopes the client is allowed to access
-                    var clientAllowedScopes = new List<string>();
-                    if (!ignoreImplicitIdentityScopes)
-                    {
-                        var resources = await _resourceStore.FindResourcesByScopeAsync(_validatedRequest.Client.AllowedScopes);
-                        clientAllowedScopes.AddRange(resources.ToScopeNames().Where(x => _validatedRequest.Client.AllowedScopes.Contains(x)));
-                    }
-                    else
-                    {
-                        var apiScopes = await _resourceStore.FindApiScopesByNameAsync(_validatedRequest.Client.AllowedScopes);
-                        clientAllowedScopes.AddRange(apiScopes.Select(x => x.Name));
-                    }
-
-                    if (!ignoreImplicitOfflineAccess)
-                    {
-                        if (_validatedRequest.Client.AllowOfflineAccess)
-                        {
-                            clientAllowedScopes.Add(IdentityServerConstants.StandardScopes.OfflineAccess);
-                        }
-                    }
-
-                    scopes = clientAllowedScopes.Distinct().ToSpaceSeparatedString();
-                    _logger.LogTrace("Defaulting to: {scopes}", scopes);
-                }
-                else
-                {
-                    LogError("No allowed scopes configured for client", new { clientId = _validatedRequest.Client.ClientId });
-                    return false;
-                }
-            }
-
-            if (scopes.Length > _options.InputLengthRestrictions.Scope)
-            {
-                LogError("Scope parameter exceeds max allowed length");
-                return false;
-            }
-
-            var requestedScopes = scopes.ParseScopesString();
-
-            if (requestedScopes == null)
-            {
-                LogError("No scopes found in request");
-                return false;
-            }
-
-            var resourceValidationResult = await _resourceValidator.ValidateRequestedResourcesAsync(new ResourceValidationRequest { 
-                Client = _validatedRequest.Client,
-                Scopes = requestedScopes
-            });
-
-            if (!resourceValidationResult.Succeeded)
-            {
-                if (resourceValidationResult.InvalidScopes.Any())
-                {
-                    LogError("Invalid scopes requested");
-                }
-                else
-                {
-                    LogError("Invalid scopes for client requested");
-                }
-
-                return false;
-            }
-
-            _validatedRequest.RequestedScopes = requestedScopes;
-            _validatedRequest.ValidatedResources = resourceValidationResult;
-            
-            return true;
-        }
-
-        private TokenRequestValidationResult ValidateAuthorizationCodeWithProofKeyParameters(string codeVerifier, AuthorizationCode authZcode)
-        {
-            if (authZcode.CodeChallenge.IsMissing() || authZcode.CodeChallengeMethod.IsMissing())
-            {
-                LogError("Client is missing code challenge or code challenge method", new { clientId = _validatedRequest.Client.ClientId });
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            if (codeVerifier.IsMissing())
-            {
-                LogError("Missing code_verifier");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            if (codeVerifier.Length < _options.InputLengthRestrictions.CodeVerifierMinLength ||
-                codeVerifier.Length > _options.InputLengthRestrictions.CodeVerifierMaxLength)
-            {
-                LogError("code_verifier is too short or too long");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            if (Constants.SupportedCodeChallengeMethods.Contains(authZcode.CodeChallengeMethod) == false)
-            {
-                LogError("Unsupported code challenge method", new { codeChallengeMethod = authZcode.CodeChallengeMethod });
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            if (ValidateCodeVerifierAgainstCodeChallenge(codeVerifier, authZcode.CodeChallenge, authZcode.CodeChallengeMethod) == false)
-            {
-                LogError("Transformed code verifier does not match code challenge");
-                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
-            }
-
-            return Valid();
-        }
-
-        private bool ValidateCodeVerifierAgainstCodeChallenge(string codeVerifier, string codeChallenge, string codeChallengeMethod)
-        {
-            if (codeChallengeMethod == OidcConstants.CodeChallengeMethods.Plain)
-            {
-                return TimeConstantComparer.IsEqual(codeVerifier.Sha256(), codeChallenge);
-            }
-
-            var codeVerifierBytes = Encoding.ASCII.GetBytes(codeVerifier);
-            var hashedBytes = codeVerifierBytes.Sha256();
-            var transformedCodeVerifier = Base64Url.Encode(hashedBytes);
-
-            return TimeConstantComparer.IsEqual(transformedCodeVerifier.Sha256(), codeChallenge);
-        }
-
-        private TokenRequestValidationResult Valid(Dictionary<string, object> customResponse = null)
-        {
-            return new TokenRequestValidationResult(_validatedRequest, customResponse);
-        }
-
-        private TokenRequestValidationResult Invalid(string error, string errorDescription = null, Dictionary<string, object> customResponse = null)
-        {
-            return new TokenRequestValidationResult(_validatedRequest, error, errorDescription, customResponse);
-        }
-
-        private void LogError(string message = null, object values = null)
-        {
-            LogWithRequestDetails(LogLevel.Error, message, values);
-        }
-
-        private void LogWarning(string message = null, object values = null)
-        {
-            LogWithRequestDetails(LogLevel.Warning, message, values);
-        }
-
-        private void LogInformation(string message = null, object values = null)
-        {
-            LogWithRequestDetails(LogLevel.Information, message, values);
-        }
-
-        private void LogWithRequestDetails(LogLevel logLevel, string message = null, object values = null)
-        {
-            var details = new TokenRequestValidationLog(_validatedRequest, _options.Logging.TokenRequestSensitiveValuesFilter);
-
-            if (message.IsPresent())
-            {
-                try
-                {
-                    if (values == null)
-                    {
-                        _logger.Log(logLevel, message + ", {@details}", details);
-                    }
-                    else
-                    {
-                        _logger.Log(logLevel, message + "{@values}, details: {@details}", values, details);
-                    }
-
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError("Error logging {exception}, request details: {@details}", ex.Message, details);
-                }
-            }
-            else
-            {
-                _logger.Log(logLevel, "{@details}", details);
-            }
-        }
-
-        private void LogSuccess()
-        {
-            LogWithRequestDetails(LogLevel.Information, "Token request validation success");
-        }
-
-        private Task RaiseSuccessfulResourceOwnerAuthenticationEventAsync(string userName, string subjectId, string clientId)
-        {
-            return _events.RaiseAsync(new UserLoginSuccessEvent(userName, subjectId, null, interactive: false, clientId));
-        }
-
-        private Task RaiseFailedResourceOwnerAuthenticationEventAsync(string userName, string error, string clientId)
-        {
-            return _events.RaiseAsync(new UserLoginFailureEvent(userName, error, interactive: false, clientId: clientId));
-        }
+        this.logger                  = logger;
+        this.options                 = options;
+        this.clock                   = clock;
+        this.authorizationCodeStore  = authorizationCodeStore;
+        this.resourceOwnerValidator  = resourceOwnerValidator;
+        this.profile                 = profile;
+        this.deviceCodeValidator     = deviceCodeValidator;
+        this.extensionGrantValidator = extensionGrantValidator;
+        this.customRequestValidator  = customRequestValidator;
+        this.resourceValidator       = resourceValidator;
+        this.resourceStore           = resourceStore;
+        this.refreshTokenService     = refreshTokenService;
+        this.events                  = events;
     }
+
+    /// <summary>
+    /// Validates the request.
+    /// </summary>
+    /// <param name="parameters">The parameters.</param>
+    /// <param name="clientValidationResult">The client validation result.</param>
+    /// <returns></returns>
+    /// <exception cref="System.ArgumentNullException">
+    /// parameters
+    /// or
+    /// client
+    /// </exception>
+    public async Task<ValidationResult> ValidateRequestAsync(Dictionary<string,string> parameters, ClientSecretValidationResult clientValidationResult)
+    {
+        logger.LogDebug("Start token request validation");
+
+        if (clientValidationResult == null) throw new ArgumentNullException(nameof(clientValidationResult));
+
+        var client = clientValidationResult.Client;
+
+        // check client protocol type
+        if (client.ProtocolType != IdentityServerConstants.ProtocolTypes.OpenIdConnect) {
+            logger.LogError("Invalid protocol type for client {@Client}",
+                            new{
+                                clientId = client.ClientId,
+                                expectedProtocolType = IdentityServerConstants.ProtocolTypes.OpenIdConnect,
+                                actualProtocolType = client.ProtocolType
+                            });
+
+            return Invalid(OidcConstants.TokenErrors.InvalidClient);
+        }
+
+        // check grant type
+        var gt = parameters.Get(OidcConstants.TokenRequest.GrantType);
+        if (gt.IsNone)
+        {
+            logger.LogError("Grant type is missing");
+            return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
+        }
+        var grantType = gt.Get();
+
+        if (grantType.Length > options.InputLengthRestrictions.GrantType)
+        {
+            logger.LogError("Grant type is too long");
+            return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
+        }
+
+        var validatedRequest = new ValidatedTokenRequest{
+            Raw     = parameters ?? throw new ArgumentNullException(nameof(parameters)),
+            Options = options,
+            ValidatedClient =  ValidatedClient.Create(clientValidationResult.Client, clientValidationResult.Secret, clientValidationResult.Confirmation),
+            GrantType = grantType
+        };
+
+        return await (grantType switch{
+            OidcConstants.GrantTypes.AuthorizationCode => ValidateAuthorizationCodeRequestAsync(validatedRequest, parameters),
+            OidcConstants.GrantTypes.ClientCredentials => ValidateClientCredentialsRequestAsync(validatedRequest, parameters),
+            OidcConstants.GrantTypes.Password          => ValidateResourceOwnerCredentialRequestAsync(validatedRequest, parameters),
+            OidcConstants.GrantTypes.RefreshToken      => ValidateRefreshTokenRequestAsync(validatedRequest, parameters),
+            OidcConstants.GrantTypes.DeviceCode        => ValidateDeviceCodeRequestAsync(validatedRequest, parameters),
+            _                                          => ValidateExtensionGrantRequestAsync(validatedRequest, parameters)
+        }).BindAsync(_ => RunValidationAsync(validatedRequest));
+    }
+
+    async Task<ValidationResult> RunValidationAsync(ValidatedTokenRequest validatedRequest) {
+        // run custom validation
+        logger.LogTrace("Calling into custom request validator: {Type}", customRequestValidator.GetType().FullName);
+
+        var validatedTokenResult = await customRequestValidator.ValidateAsync(validatedRequest);
+        if (validatedTokenResult.IsLeft)
+            LogError(validatedRequest, "Custom token request validator", new{ error = validatedTokenResult.GetLeft().Error });
+        else
+            LogSuccess(validatedRequest);
+        return validatedTokenResult;
+    }
+
+    async Task<ValidationResult> ValidateAuthorizationCodeRequestAsync(ValidatedTokenRequest validatedRequest, Dictionary<string,string> parameters)
+    {
+        logger.LogDebug("Start validation of authorization code token request");
+        var client = validatedRequest.ValidatedClient.Get(c => c.Client);
+
+        // check if client is authorized for grant type
+        if (!client.AllowedGrantTypes.Contains(GrantType.AuthorizationCode) && !client.AllowedGrantTypes.Contains(GrantType.Hybrid))
+        {
+            LogError(validatedRequest, "Client not authorized for code flow");
+            return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
+        }
+
+        // validate authorization code
+        var codeOpt = parameters.Get(OidcConstants.TokenRequest.Code);
+        if (codeOpt.IsNone)
+        {
+            LogError(validatedRequest, "Authorization code is missing");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+        var code = codeOpt.Get();
+
+        if (code.Length > options.InputLengthRestrictions.AuthorizationCode)
+        {
+            LogError(validatedRequest, "Authorization code is too long");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        validatedRequest.AuthorizationCodeHandle = code;
+
+        var az = await authorizationCodeStore.GetAuthorizationCodeAsync(code);
+        if (az.IsNone)
+        {
+            LogError(validatedRequest, "Invalid authorization code", new { code });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+        var authZcode = az.Get();
+
+        // validate client binding
+        if (authZcode.ClientId != client.ClientId)
+        {
+            LogError(validatedRequest, "Client is trying to use a code from a different client", new { clientId = client.ClientId, codeClient = authZcode.ClientId });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        // remove code from store
+        // todo: set to consumed in the future?
+        await authorizationCodeStore.RemoveAuthorizationCodeAsync(code);
+
+        if (authZcode.CreationTime.HasExceeded(authZcode.Lifetime, clock.UtcNow.UtcDateTime))
+        {
+            LogError(validatedRequest, "Authorization code expired", new { code });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        // populate session id
+        if (authZcode.SessionId.IsPresent()) validatedRequest.SessionId = authZcode.SessionId;
+
+        // validate code expiration
+        if (authZcode.CreationTime.HasExceeded(client.AuthorizationCodeLifetime, clock.UtcNow.UtcDateTime))
+        {
+            LogError(validatedRequest, "Authorization code is expired");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        validatedRequest.AuthorizationCode = authZcode;
+        validatedRequest.Subject           = authZcode.Subject;
+
+        // validate redirect_uri
+        var redirectUriOpt = parameters.Get(OidcConstants.TokenRequest.RedirectUri);
+        if (redirectUriOpt.IsNone)
+        {
+            LogError(validatedRequest, "Redirect URI is missing");
+            return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
+        }
+        var redirectUri = redirectUriOpt.Get();
+
+        var authorizationCode = validatedRequest.AuthorizationCode.Get();
+        if (!redirectUri.Equals(authorizationCode.RedirectUri, StringComparison.Ordinal))
+        {
+            LogError(validatedRequest, "Invalid redirect_uri", new { redirectUri, expectedRedirectUri = authorizationCode.RedirectUri });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        // validate scopes are present
+        if (!validatedRequest.AuthorizationCode.Get().RequestedScopes.Any())
+        {
+            LogError(validatedRequest, "Authorization code has no associated scopes");
+            return Invalid(OidcConstants.TokenErrors.InvalidRequest);
+        }
+
+        // validate PKCE parameters
+        var codeVerifier = parameters.Get(OidcConstants.TokenRequest.CodeVerifier).Get();
+
+        if (client.RequirePkce || authorizationCode.CodeChallenge.IsPresent())
+        {
+            logger.LogDebug("Client required a proof key for code exchange. Starting PKCE validation");
+
+            var proofKeyResult = ValidateAuthorizationCodeWithProofKeyParameters(validatedRequest, codeVerifier, authorizationCode);
+            if (proofKeyResult.IsLeft)
+                return proofKeyResult;
+
+            validatedRequest.CodeVerifier = codeVerifier;
+        }
+        else
+        {
+            if (codeVerifier.IsPresent())
+            {
+                LogError(validatedRequest, "Unexpected code_verifier: {codeVerifier}. This happens when the client is trying to use PKCE, but it is not enabled. Set RequirePkce to true.", codeVerifier);
+                return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+            }
+        }
+
+        // make sure user is enabled
+        var subject = authorizationCode.Subject.Get();
+        var isActive = await profile.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.AuthorizationCodeValidation);
+
+        if (!isActive)
+        {
+            LogError(validatedRequest, "User has been disabled", new { subjectId = subject.GetSubjectId() });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        logger.LogDebug("Validation of authorization code token request success");
+
+        return Valid();
+    }
+
+    async Task<ValidationResult> ValidateClientCredentialsRequestAsync(ValidatedTokenRequest validatedRequest, Dictionary<string,string> parameters)
+    {
+        logger.LogDebug("Start client credentials token request validation");
+
+        var client = validatedRequest.ValidatedClient.Get().Client;
+
+        // check if client is authorized for grant type
+        if (!client.AllowedGrantTypes.Contains(GrantType.ClientCredentials))
+        {
+            LogError(validatedRequest, "Client not authorized for client credentials flow, check the AllowedGrantTypes setting", new { clientId = client.ClientId });
+            return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
+        }
+
+        // check if client is allowed to request scopes
+        if (!await ValidateRequestedScopesAsync(validatedRequest, parameters, ignoreImplicitIdentityScopes: true, ignoreImplicitOfflineAccess: true))
+            return Invalid(OidcConstants.TokenErrors.InvalidScope);
+
+        if (validatedRequest.ValidatedResources.Resources.IdentityResources.Any())
+        {
+            LogError(validatedRequest, "Client cannot request OpenID scopes in client credentials flow", new { clientId = client.ClientId });
+            return Invalid(OidcConstants.TokenErrors.InvalidScope);
+        }
+
+        if (validatedRequest.ValidatedResources.Resources.OfflineAccess)
+        {
+            LogError(validatedRequest, "Client cannot request a refresh token in client credentials flow", new { clientId = client.ClientId });
+            return Invalid(OidcConstants.TokenErrors.InvalidScope);
+        }
+
+        logger.LogDebug("{ClientId} credentials token request validation success", client.ClientId);
+        return Valid();
+    }
+
+    async Task<ValidationResult> ValidateResourceOwnerCredentialRequestAsync(ValidatedTokenRequest validatedRequest, Dictionary<string,string> parameters)
+    {
+        logger.LogDebug("Start resource owner password token request validation");
+        var client = validatedRequest.ValidatedClient.Get().Client;
+
+        // check if client is authorized for grant type
+        if (!client.AllowedGrantTypes.Contains(GrantType.ResourceOwnerPassword))
+        {
+            LogError(validatedRequest, "Client not authorized for resource owner flow, check the AllowedGrantTypes setting", new { client_id = client.ClientId });
+            return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
+        }
+
+        // check if client is allowed to request scopes
+        if (!await ValidateRequestedScopesAsync(validatedRequest, parameters))
+            return Invalid(OidcConstants.TokenErrors.InvalidScope);
+
+        // check resource owner credentials
+        var un = parameters.Get(OidcConstants.TokenRequest.UserName);
+
+        if (un.IsNone)
+        {
+            LogError(validatedRequest, "Username is missing");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+        var userName = un.Get();
+
+        var password = parameters.Get(OidcConstants.TokenRequest.Password).Map(s => s.Trim()).IfNone(string.Empty);
+
+        if (userName.Length > options.InputLengthRestrictions.UserName || password.Length > options.InputLengthRestrictions.Password)
+        {
+            LogError(validatedRequest, "Username or password too long");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        validatedRequest.UserName = userName;
+
+        // authenticate user
+        var resourceOwnerContext = new ResourceOwnerPasswordValidationContext(userName, password, validatedRequest);
+        var result = await resourceOwnerValidator.ValidateAsync(resourceOwnerContext);
+
+        if (result.IsLeft) {
+            var err = result.GetLeft();
+            if (err.Error == OidcConstants.TokenErrors.UnsupportedGrantType)
+            {
+                LogError(validatedRequest, "Resource owner password credential grant type not supported");
+                await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, "password grant type not supported", client.ClientId);
+
+                return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType, customResponse: err.CustomResponse);
+            }
+
+            var errorDescription = err.ErrorDescription ?? "invalid_username_or_password";
+
+            LogInformation(validatedRequest, "User authentication failed: ", errorDescription);
+            await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, errorDescription, client.ClientId);
+
+            return Invalid(err.Error, errorDescription, err.CustomResponse);
+        }
+
+        var resourceResult = result.GetRight();
+
+        // make sure user is enabled
+        var isActive = await profile.IsActiveAsync(resourceResult.Subject, client, IdentityServerConstants.ProfileIsActiveCallers.ResourceOwnerValidation);
+
+        if (!isActive)
+        {
+            LogError(validatedRequest, "User has been disabled", new { subjectId = resourceResult.Subject.GetSubjectId() });
+            await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, "user is inactive", client.ClientId);
+
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        validatedRequest.UserName = userName;
+        validatedRequest.Subject  = resourceResult.Subject;
+
+        await RaiseSuccessfulResourceOwnerAuthenticationEventAsync(userName, resourceResult.Subject.GetSubjectId(), client.ClientId);
+        logger.LogDebug("Resource owner password token request validation success");
+        return Valid();
+    }
+
+    async Task<ValidationResult> ValidateRefreshTokenRequestAsync(ValidatedTokenRequest validatedRequest, Dictionary<string,string> parameters)
+    {
+        logger.LogDebug("Start validation of refresh token request");
+
+        var rth = parameters.Get(OidcConstants.TokenRequest.RefreshToken);
+        if (rth.IsNone)
+        {
+            LogError(validatedRequest, "Refresh token is missing");
+            return Invalid(OidcConstants.TokenErrors.InvalidRequest);
+        }
+        var refreshTokenHandle = rth.Get();
+
+        if (refreshTokenHandle.Length > options.InputLengthRestrictions.RefreshToken)
+        {
+            LogError(validatedRequest, "Refresh token too long");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        var result = await refreshTokenService.ValidateRefreshTokenAsync(refreshTokenHandle, validatedRequest.ValidatedClient.Get().Client);
+
+        if (result.IsLeft)
+        {
+            LogWarning(validatedRequest, "Refresh token validation failed. aborting");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+        var refreshToken = result.GetRight();
+
+        validatedRequest.RefreshToken       = refreshToken;
+        validatedRequest.RefreshTokenHandle = refreshTokenHandle;
+        validatedRequest.Subject            = refreshToken.Subject;
+
+        logger.LogDebug("Validation of refresh token request success");
+        // todo: more logging - similar to TokenValidator before
+
+        return Valid();
+    }
+
+    async Task<ValidationResult> ValidateDeviceCodeRequestAsync(ValidatedTokenRequest validatedRequest, Dictionary<string,string> parameters) {
+        var client = validatedRequest.ValidatedClient.Get().Client;
+        logger.LogDebug("Start validation of device code request");
+
+        // check if client is authorized for grant type
+        if (!client.AllowedGrantTypes.ToList().Contains(GrantType.DeviceFlow))
+        {
+            LogError(validatedRequest, "Client not authorized for device flow");
+            return Invalid(OidcConstants.TokenErrors.UnauthorizedClient);
+        }
+
+        // validate device code parameter
+        var deviceCode = parameters.Get(OidcConstants.TokenRequest.DeviceCode);
+        if (deviceCode.IsNone)
+        {
+            LogError(validatedRequest, "Device code is missing");
+            return Invalid(OidcConstants.TokenErrors.InvalidRequest);
+        }
+
+        if (deviceCode.Get().Length > options.InputLengthRestrictions.DeviceCode)
+        {
+            LogError(validatedRequest, "Device code too long");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        // validate device code
+        var result = await deviceCodeValidator.ValidateAsync(client, deviceCode.Get());
+
+        return result.Map(_ => {
+            logger.LogDebug("Validation of authorization code token request success");
+            return Valid();
+        });
+    }
+
+    async Task<ValidationResult> ValidateExtensionGrantRequestAsync(ValidatedTokenRequest validatedRequest, Dictionary<string,string> parameters)
+    {
+        var client = validatedRequest.ValidatedClient.Get().Client;
+        logger.LogDebug("Start validation of custom grant token request");
+
+        // check if client is allowed to use grant type
+        if (!client.AllowedGrantTypes.Contains(validatedRequest.GrantType))
+        {
+            LogError(validatedRequest, "Client does not have the custom grant type in the allowed list, therefore requested grant is not allowed", new { clientId = client.ClientId });
+            return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
+        }
+
+        // check if a validator is registered for the grant type
+        if (!extensionGrantValidator.GetAvailableGrantTypes().Contains(validatedRequest.GrantType, StringComparer.Ordinal))
+        {
+            LogError(validatedRequest, "No validator is registered for the grant type", new { grantType = validatedRequest.GrantType });
+            return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
+        }
+
+        // check if client is allowed to request scopes
+        if (!await ValidateRequestedScopesAsync(validatedRequest, parameters))
+            return Invalid(OidcConstants.TokenErrors.InvalidScope);
+
+        // validate custom grant type
+        var result = await extensionGrantValidator.ValidateAsync(validatedRequest);
+
+        if (result.IsLeft) {
+            var err = result.GetLeft();
+            LogError(validatedRequest, "Invalid extension grant", new{ error = err.Error });
+            return Invalid(err.Error, err.ErrorDescription, err.CustomResponse);
+        }
+        var subject = result.GetRight().Subject;
+
+        // make sure user is enabled
+        var isActive = await profile.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.ExtensionGrantValidation);
+
+        if (!isActive) {
+            // todo: raise event?
+
+            LogError(validatedRequest, "User has been disabled", new{ subjectId = subject.GetSubjectId() });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        validatedRequest.Subject = subject;
+
+        logger.LogDebug("Validation of extension grant token request success");
+        return Valid();
+    }
+
+    // todo: do we want to rework the semantics of these ignore params?
+    // also seems like other workflows other than CC clients can omit scopes?
+    async Task<bool> ValidateRequestedScopesAsync(ValidatedTokenRequest validatedRequest, Dictionary<string,string> parameters, bool ignoreImplicitIdentityScopes = false, bool ignoreImplicitOfflineAccess = false)
+    {
+        var client = validatedRequest.ValidatedClient.Get().Client;
+        var scopes = parameters.Get(OidcConstants.TokenRequest.Scope);
+        if (scopes.IsNone)
+        {
+            logger.LogTrace("Client provided no scopes - checking allowed scopes list");
+
+            if (!client.AllowedScopes.IsNullOrEmpty())
+            {
+                // this finds all the scopes the client is allowed to access
+                var clientAllowedScopes = new List<string>();
+                if (ignoreImplicitIdentityScopes) {
+                    var apiScopes = await resourceStore.FindApiScopesByNameAsync(client.AllowedScopes);
+                    clientAllowedScopes.AddRange(apiScopes.Select(x => x.Name));
+                }
+                else {
+                    var resources = await resourceStore.FindResourcesByScopeAsync(client.AllowedScopes);
+                    clientAllowedScopes.AddRange(resources.ToScopeNames().Where(x => client.AllowedScopes.Contains(x)));
+                }
+
+                if (!ignoreImplicitOfflineAccess && client.AllowOfflineAccess)
+                    clientAllowedScopes.Add(IdentityServerConstants.StandardScopes.OfflineAccess);
+
+                scopes = clientAllowedScopes.Distinct().ToSpaceSeparatedString();
+                logger.LogTrace("Defaulting to: {Scopes}", scopes.Get());
+            }
+            else
+            {
+                LogError(validatedRequest, "No allowed scopes configured for client", new { clientId = client.ClientId });
+                return false;
+            }
+        }
+
+        if (scopes.Get().Length > options.InputLengthRestrictions.Scope)
+        {
+            LogError(validatedRequest, "Scope parameter exceeds max allowed length");
+            return false;
+        }
+
+        var requestedScopes = scopes.Get().ParseScopesString().ToArray();
+
+        if (requestedScopes.Length == 0)
+        {
+            LogError(validatedRequest, "No scopes found in request");
+            return false;
+        }
+
+        var resourceValidationResult = await resourceValidator.ValidateScopesWithClient(new(client, requestedScopes));
+
+        if (!resourceValidationResult.Succeeded) {
+            LogError(validatedRequest, resourceValidationResult.InvalidScopes.Any() ? "Invalid scopes requested" : "Invalid scopes for client requested");
+
+            return false;
+        }
+
+        validatedRequest.RequestedScopes    = requestedScopes;
+        validatedRequest.ValidatedResources = resourceValidationResult;
+
+        return true;
+    }
+
+    ValidationResult ValidateAuthorizationCodeWithProofKeyParameters(ValidatedTokenRequest validatedRequest, string codeVerifier, AuthorizationCode authZcode)
+    {
+        if (authZcode.CodeChallenge.IsMissing() || authZcode.CodeChallengeMethod.IsMissing())
+        {
+            LogError(validatedRequest, "Client is missing code challenge or code challenge method", new { clientId = validatedRequest.ValidatedClient.Get().Client.ClientId });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        if (codeVerifier.IsMissing())
+        {
+            LogError(validatedRequest, "Missing code_verifier");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        if (codeVerifier.Length < options.InputLengthRestrictions.CodeVerifierMinLength ||
+            codeVerifier.Length > options.InputLengthRestrictions.CodeVerifierMaxLength)
+        {
+            LogError(validatedRequest, "code_verifier is too short or too long");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        if (Constants.SupportedCodeChallengeMethods.Contains(authZcode.CodeChallengeMethod) == false)
+        {
+            LogError(validatedRequest, "Unsupported code challenge method", new { codeChallengeMethod = authZcode.CodeChallengeMethod });
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        if (ValidateCodeVerifierAgainstCodeChallenge(codeVerifier, authZcode.CodeChallenge, authZcode.CodeChallengeMethod) == false)
+        {
+            LogError(validatedRequest, "Transformed code verifier does not match code challenge");
+            return Invalid(OidcConstants.TokenErrors.InvalidGrant);
+        }
+
+        return Valid();
+    }
+
+    static bool ValidateCodeVerifierAgainstCodeChallenge(string codeVerifier, string codeChallenge, string codeChallengeMethod)
+    {
+        if (codeChallengeMethod == OidcConstants.CodeChallengeMethods.Plain)
+            return TimeConstantComparer.IsEqual(codeVerifier.Sha256(), codeChallenge);
+
+        var codeVerifierBytes = Encoding.ASCII.GetBytes(codeVerifier);
+        var hashedBytes = codeVerifierBytes.Sha256();
+        var transformedCodeVerifier = Base64Url.Encode(hashedBytes);
+
+        return TimeConstantComparer.IsEqual(transformedCodeVerifier.Sha256(), codeChallenge);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Unit Valid() => Unit.Default;
+
+    static ErrorWithCustomResponse Invalid(string error, string? errorDescription = null, Dictionary<string, object>? customResponse = null) =>
+        new(error, errorDescription, customResponse ?? new());
+
+    void LogError(ValidatedTokenRequest validatedRequest, string? message = null, object? values = null) =>
+        LogWithRequestDetails(validatedRequest, LogLevel.Error, message, values);
+
+    void LogWarning(ValidatedTokenRequest validatedRequest, string? message = null, object? values = null) =>
+        LogWithRequestDetails(validatedRequest, LogLevel.Warning, message, values);
+
+    void LogInformation(ValidatedTokenRequest validatedRequest, string? message = null, object? values = null) =>
+        LogWithRequestDetails(validatedRequest, LogLevel.Information, message, values);
+
+    void LogWithRequestDetails(ValidatedTokenRequest validatedRequest, LogLevel logLevel, string? message = null, object? values = null)
+    {
+        var sensitiveValuesFilter = options.Logging.TokenRequestSensitiveValuesFilter;
+        var details = CreateLogDetail(validatedRequest, sensitiveValuesFilter);
+
+        if (message.IsPresent())
+            if (values == null)
+                logger.Log(logLevel, "{Message}, {@Details}", message, details);
+            else
+                logger.Log(logLevel, "{Message} {@Values}, details: {@Details}", message, values, details);
+        else
+            logger.Log(logLevel, "{@Details}", details);
+    }
+
+    [Pure]
+    static object CreateLogDetail(ValidatedTokenRequest request, string[] sensitiveValuesFilter) =>
+        new{
+            Raw = request.Raw.ToScrubbedDictionary(sensitiveValuesFilter),
+            ClientId = request.ValidatedClient.GetOrDefault(c => c.Client.ClientId),
+            ClientName = request.ValidatedClient.GetOrDefault(c => c.Client.ClientName),
+            Scopes = request.RequestedScopes.ToSpaceSeparatedString(),
+            GrantType = request.GrantType,
+            AuthorizationCode = request.AuthorizationCodeHandle.Obfuscate(),
+            RefreshToken = request.RefreshTokenHandle.Obfuscate(),
+            UserName = request.UserName
+        };
+
+    void LogSuccess(ValidatedTokenRequest validatedRequest) => LogWithRequestDetails(validatedRequest, LogLevel.Information, "Token request validation success");
+
+    Task RaiseSuccessfulResourceOwnerAuthenticationEventAsync(string userName, string subjectId, string clientId) =>
+        events.RaiseAsync(UserLoginSuccessEvent.Create(userName, subjectId, null, interactive: false, clientId));
+
+    Task RaiseFailedResourceOwnerAuthenticationEventAsync(string userName, string error, string clientId) =>
+        events.RaiseAsync(UserLoginFailureEvent.Create(userName, error, interactive: false, clientId: clientId));
 }

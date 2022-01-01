@@ -2,129 +2,102 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Collections.Generic;
-using IdentityServer4.Configuration;
-using IdentityServer4.Models;
-using System.Collections.Specialized;
-using System.Security.Claims;
-using IdentityModel;
-using System.Linq;
 using System;
+using System.Collections.Specialized;
+using System.Linq;
+using System.Security.Claims;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Models;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Models;
+
+/// <summary>
+/// Base class for a validate authorize or token request
+/// </summary>
+// TODO: Must break down this global state bag in the future...
+public abstract class ValidatedRequest
 {
     /// <summary>
-    /// Base class for a validate authorize or token request
+    /// Gets or sets the raw request data
     /// </summary>
-    public class ValidatedRequest
-    {
-        /// <summary>
-        /// Gets or sets the raw request data
-        /// </summary>
-        /// <value>
-        /// The raw.
-        /// </value>
-        public NameValueCollection Raw { get; set; }
+    /// <value>
+    /// The raw.
+    /// </value>
+    public Dictionary<string,string> Raw { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets the client.
-        /// </summary>
-        /// <value>
-        /// The client.
-        /// </value>
-        public Client Client { get; set; }
+    /// <summary>
+    /// Gets or sets the subject.
+    /// </summary>
+    /// <value>
+    /// The subject.
+    /// </value>
+    public Option<ClaimsPrincipal> Subject { get; set; }
 
-        /// <summary>
-        /// Gets or sets the secret used to authenticate the client.
-        /// </summary>
-        /// <value>
-        /// The parsed secret.
-        /// </value>
-        public ParsedSecret Secret { get; set; }
+    /// <summary>
+    /// Gets or sets the session identifier.
+    /// </summary>
+    /// <value>
+    /// The session identifier.
+    /// </value>
+    public string SessionId { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Gets or sets the effective access token lifetime for the current request.
-        /// This value is initally read from the client configuration but can be modified in the request pipeline
-        /// </summary>
-        public int AccessTokenLifetime { get; set; }
+    /// <summary>
+    /// Gets or sets the identity server options.
+    /// </summary>
+    /// <value>
+    /// The options.
+    /// </value>
+    public IdentityServerOptions Options { get; set; } = new ();
 
-        /// <summary>
-        /// Gets or sets the client claims for the current request.
-        /// This value is initally read from the client configuration but can be modified in the request pipeline
-        /// </summary>
-        public ICollection<Claim> ClientClaims { get; set; } = new HashSet<Claim>(new ClaimComparer());
+    /// <summary>
+    /// Gets or sets the validated resources for the request.
+    /// </summary>
+    /// <value>
+    /// The validated resources.
+    /// </value>
+    public ResourceValidationResult ValidatedResources { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets the effective access token type for the current request.
-        /// This value is initally read from the client configuration but can be modified in the request pipeline
-        /// </summary>
-        public AccessTokenType AccessTokenType { get; set; }
+    /// <summary>
+    /// Validated client information
+    /// </summary>
+    public Option<ValidatedClient> ValidatedClient { get; set; }
+}
 
-        /// <summary>
-        /// Gets or sets the subject.
-        /// </summary>
-        /// <value>
-        /// The subject.
-        /// </value>
-        public ClaimsPrincipal Subject { get; set; }
-
-        /// <summary>
-        /// Gets or sets the session identifier.
-        /// </summary>
-        /// <value>
-        /// The session identifier.
-        /// </value>
-        public string SessionId { get; set; }
-        
-        /// <summary>
-        /// Gets or sets the identity server options.
-        /// </summary>
-        /// <value>
-        /// The options.
-        /// </value>
-        public IdentityServerOptions Options { get; set; }
-
-        /// <summary>
-        /// Gets or sets the validated resources for the request.
-        /// </summary>
-        /// <value>
-        /// The validated resources.
-        /// </value>
-        public ResourceValidationResult ValidatedResources { get; set; } = new ResourceValidationResult();
-
-        /// <summary>
-        /// Gets or sets the value of the confirmation method (will become the cnf claim). Must be a JSON object.
-        /// </summary>
-        /// <value>
-        /// The confirmation.
-        /// </value>
-        public string Confirmation { get; set; }
-
-        /// <summary>
-        /// Gets or sets the client ID that should be used for the current request (this is useful for token exchange scenarios)
-        /// </summary>
-        /// <value>
-        /// The client ID
-        /// </value>
-        public string ClientId { get; set; }
-
-        /// <summary>
-        /// Sets the client and the appropriate request specific settings.
-        /// </summary>
-        /// <param name="client">The client.</param>
-        /// <param name="secret">The client secret (optional).</param>
-        /// <param name="confirmation">The confirmation.</param>
-        /// <exception cref="ArgumentNullException">client</exception>
-        public void SetClient(Client client, ParsedSecret secret = null, string confirmation = "")
-        {
-            Client = client ?? throw new ArgumentNullException(nameof(client));
-            Secret = secret;
-            Confirmation = confirmation;
-            ClientId = client.ClientId;
-
-            AccessTokenLifetime = client.AccessTokenLifetime;
-            AccessTokenType = client.AccessTokenType;
-            ClientClaims = client.Claims.Select(c => new Claim(c.Type, c.Value, c.ValueType)).ToList();
-        }
-    }
+/// <summary>
+/// Represents an existing validated client
+/// </summary>
+/// <param name="Client"></param>
+/// <param name="Secret">the secret used to authenticate the client.</param>
+/// <param name="Confirmation">the value of the confirmation method (will become the cnf claim). Must be a JSON object.</param>
+/// <param name="ClientId">the client ID that should be used for the current request (this is useful for token exchange scenarios)</param>
+/// <param name="AccessTokenLifetime">
+/// The effective access token lifetime for the current request.
+/// This value is initially read from the client configuration but can be modified in the request pipeline
+/// </param>
+/// <param name="AccessTokenType">
+/// The effective access token type for the current request.
+/// This value is initially read from the client configuration but can be modified in the request pipeline
+/// </param>
+/// <param name="ClientClaims">
+/// The client claims for the current request.
+/// This value is initially read from the client configuration but can be modified in the request pipeline
+/// </param>
+public sealed record ValidatedClient(Client          Client,          Option<ParsedSecret> Secret, string Confirmation, string ClientId, int AccessTokenLifetime,
+                                     AccessTokenType AccessTokenType, ClaimCollection      ClientClaims)
+{
+    /// <summary>
+    /// Sets the client and the appropriate request specific settings.
+    /// </summary>
+    /// <param name="client">The client.</param>
+    /// <param name="secret">The client secret (optional).</param>
+    /// <param name="confirmation">The confirmation.</param>
+    /// <exception cref="ArgumentNullException">client</exception>
+    public static ValidatedClient Create(Client client, ParsedSecret? secret = null, string confirmation = "") =>
+        new(client,
+            Optional(secret!),
+            confirmation,
+            client.ClientId,
+            client.AccessTokenLifetime,
+            client.AccessTokenType,
+            new(client.Claims.Select(c => new Claim(c.Type, c.Value, c.ValueType))));
 }

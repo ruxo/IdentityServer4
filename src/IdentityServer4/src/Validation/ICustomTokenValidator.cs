@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Threading.Tasks;
+using IdentityServer4.Validation.Models;
 
 namespace IdentityServer4.Validation
 {
@@ -14,15 +14,17 @@ namespace IdentityServer4.Validation
         /// <summary>
         /// Custom validation logic for access tokens.
         /// </summary>
+        /// <param name="token">Original token</param>
         /// <param name="result">The validation result so far.</param>
         /// <returns>The validation result</returns>
-        Task<TokenValidationResult> ValidateAccessTokenAsync(TokenValidationResult result);
+        Task<Option<ErrorInfo>> ValidateAccessTokenAsync(string token, TokenValidationResult result);
 
         /// <summary>
         /// Custom validation logic for identity tokens.
         /// </summary>
+        /// <param name="token">Original token</param>
         /// <param name="result">The validation result so far.</param>
         /// <returns>The validation result</returns>
-        Task<TokenValidationResult> ValidateIdentityTokenAsync(TokenValidationResult result);
+        Task<Option<ErrorInfo>> ValidateIdentityTokenAsync(string token, ValidatedJwtAccessToken result);
     }
 }

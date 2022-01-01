@@ -8,6 +8,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using LanguageExt;
+using static LanguageExt.Prelude;
 
 namespace IdentityServer4.Extensions
 {
@@ -24,15 +26,8 @@ namespace IdentityServer4.Extensions
         /// </summary>
         /// <param name="properties"></param>
         /// <returns></returns>
-        public static string GetSessionId(this AuthenticationProperties properties)
-        {
-            if (properties?.Items.ContainsKey(SessionIdKey) == true)
-            {
-                return properties.Items[SessionIdKey];
-            }
-
-            return null;
-        }
+        public static Option<string> GetSessionId(this AuthenticationProperties properties) =>
+            properties.Items.ContainsKey(SessionIdKey) ? Optional(properties.Items[SessionIdKey]!) : None;
 
         /// <summary>
         /// Sets the user's session identifier.

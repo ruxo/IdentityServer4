@@ -11,6 +11,7 @@ using System;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
+using IdentityServer4.Validation.Models;
 
 namespace IdentityServer4.Hosting.LocalApiAuthentication
 {

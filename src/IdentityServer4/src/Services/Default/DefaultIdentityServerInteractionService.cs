@@ -7,10 +7,9 @@ using IdentityServer4.Models;
 using IdentityServer4.Stores;
 using Microsoft.AspNetCore.Http;
 using System;
-using System.Threading.Tasks;
-using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using IdentityServer4.Models.Messages;
 using Microsoft.AspNetCore.Authentication;
 
 namespace IdentityServer4.Services
@@ -72,33 +71,25 @@ namespace IdentityServer4.Services
             return new LogoutRequest(iframeUrl, msg?.Data);
         }
 
-        public async Task<string> CreateLogoutContextAsync()
+        public async Task<Option<string>> CreateLogoutContextAsync()
         {
             var user = await _userSession.GetUserAsync();
-            if (user != null)
-            {
-                var clientIds = await _userSession.GetClientListAsync();
-                if (clientIds.Any())
-                {
-                    var sid = await _userSession.GetSessionIdAsync();
-                    var msg = new Message<LogoutMessage>(new LogoutMessage
-                    {
-                        SubjectId = user?.GetSubjectId(),
-                        SessionId = sid,
-                        ClientIds = clientIds
-                    }, _clock.UtcNow.UtcDateTime);
-                    var id = await _logoutMessageStore.WriteAsync(msg);
-                    return id;
-                }
-            }
+            var clientIds = Seq(await _userSession.GetClientListAsync());
+            if (!user.IsSome || !clientIds.Any()) return None;
 
-            return null;
+            var sid = await _userSession.GetSessionIdAsync();
+            var msg = Message.Create(new LogoutMessage{
+                SubjectId = user.Get().GetSubjectId(),
+                SessionId = sid.Get(),
+                ClientIds = clientIds.ToArray()
+            }, _clock.UtcNow.UtcDateTime);
+            return await _logoutMessageStore.WriteAsync(msg);
         }
 
         public async Task<ErrorMessage> GetErrorContextAsync(string errorId)
         {
             if (errorId != null)
-            { 
+            {
                 var result = await _errorMessageStore.ReadAsync(errorId);
                 var data = result?.Data;
                 if (data != null)
@@ -131,12 +122,12 @@ namespace IdentityServer4.Services
             }
 
             var consentRequest = new ConsentRequest(request, subject);
-            await _consentMessageStore.WriteAsync(consentRequest.Id, new Message<ConsentResponse>(consent, _clock.UtcNow.UtcDateTime));
+            await _consentMessageStore.WriteAsync(consentRequest.Id, Message.Create(consent, _clock.UtcNow.UtcDateTime));
         }
 
         public Task DenyAuthorizationAsync(AuthorizationRequest request, AuthorizationError error, string errorDescription = null)
         {
-            var response = new ConsentResponse 
+            var response = new ConsentResponse
             {
                 Error = error,
                 ErrorDescription = errorDescription

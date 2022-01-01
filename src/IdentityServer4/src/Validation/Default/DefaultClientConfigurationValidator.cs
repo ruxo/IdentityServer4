@@ -3,6 +3,8 @@ using IdentityServer4.Models;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using RZ.Foundation.Extensions;
 
 namespace IdentityServer4.Validation
 {
@@ -214,20 +216,10 @@ namespace IdentityServer4.Validation
         /// <returns></returns>
         protected virtual Task ValidateSecretsAsync(ClientConfigurationValidationContext context)
         {
-            if (context.Client.AllowedGrantTypes?.Any() == true)
-            {
-                foreach (var grantType in context.Client.AllowedGrantTypes)
-                {
-                    if (!string.Equals(grantType, GrantType.Implicit))
-                    {
-                        if (context.Client.RequireClientSecret && context.Client.ClientSecrets.Count == 0)
-                        {
-                            context.SetError($"Client secret is required for {grantType}, but no client secret is configured.");
-                            return Task.CompletedTask;
-                        }
-                    }
-                }
-            }
+            var requireClientSecret = context.Client.RequireClientSecret && context.Client.ClientSecrets.Length == 0;
+            var notImplicit = context.Client.AllowedGrantTypes.TryFirst(grantType => grantType != GrantType.Implicit);
+            if (requireClientSecret && notImplicit.IsSome)
+                context.SetError($"Client secret is required for {notImplicit.Get()}, but no client secret is configured.");
 
             return Task.CompletedTask;
         }

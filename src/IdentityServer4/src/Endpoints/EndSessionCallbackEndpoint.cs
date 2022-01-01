@@ -25,7 +25,7 @@ namespace IdentityServer4.Endpoints
             _logger = logger;
         }
 
-        public async Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public async Task HandleRequest(HttpContext context)
         {
             if (!HttpMethods.IsGet(context.Request.Method))
             {
@@ -35,7 +35,7 @@ namespace IdentityServer4.Endpoints
 
             _logger.LogDebug("Processing signout callback request");
 
-            var parameters = context.Request.Query.AsNameValueCollection();
+            var parameters = context.Request.Query.ToNameValueDictionary();
             var result = await _endSessionRequestValidator.ValidateCallbackAsync(parameters);
 
             if (!result.IsError)

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Threading.Tasks;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 
 namespace Microsoft.AspNetCore.Http
 {

@@ -1,58 +1,31 @@
 ﻿// Copyright (c) Brock Allen & Dominick Baier. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-
-
 using System;
 
-namespace IdentityServer4.Models
+// ReSharper disable once CheckNamespace
+namespace IdentityServer4.Models;
+
+/// <summary>
+/// Base class for data that needs to be written out as cookies.
+/// </summary>
+public sealed record Message<TModel>(TModel Data, long Created);
+
+/// <summary>
+/// Message Helper
+/// </summary>
+public static class Message
 {
     /// <summary>
-    /// Base class for data that needs to be written out as cookies.
+    /// Should only be used from unit tests
     /// </summary>
-    public class Message<TModel>
-    {
-        /// <summary>
-        /// Should only be used from unit tests
-        /// </summary>
-        /// <param name="data"></param>
-        internal Message(TModel data) : this(data, DateTime.UtcNow)
-        {
-        }
+    /// <param name="data"></param>
+    public static Message<TModel> Create<TModel>(TModel data) => new(data, DateTime.UtcNow.Ticks);
 
-        /// <summary>
-        /// For JSON serializer. 
-        /// System.Text.Json.JsonSerializer requires public, parameterless constructor
-        /// </summary>
-        public Message()
-        {
-        }
-        
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Message{TModel}"/> class.
-        /// </summary>
-        /// <param name="data">The data.</param>
-        /// <param name="now">The current UTC date/time.</param>
-        public Message(TModel data, DateTime now)
-        {
-            Created = now.Ticks;
-            Data = data;
-        }
-
-        /// <summary>
-        /// Gets or sets the UTC ticks the <see cref="Message{TModel}" /> was created.
-        /// </summary>
-        /// <value>
-        /// The created UTC ticks.
-        /// </value>
-        public long Created { get; set; }
-
-        /// <summary>
-        /// Gets or sets the data.
-        /// </summary>
-        /// <value>
-        /// The data.
-        /// </value>
-        public TModel Data { get; set; }
-    }
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Message{TModel}"/> class.
+    /// </summary>
+    /// <param name="data">The data.</param>
+    /// <param name="now">The current UTC date/time.</param>
+    public static Message<TModel> Create<TModel>(TModel data, DateTime now) => new(data, now.Ticks);
 }

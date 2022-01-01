@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Threading.Tasks;
 using IdentityServer4.Validation;
 using IdentityServer4.ResponseHandling;
 using Microsoft.Extensions.Logging;
@@ -55,7 +54,7 @@ namespace IdentityServer4.Endpoints
         /// </summary>
         /// <param name="context">The HTTP context.</param>
         /// <returns></returns>
-        public async Task<IEndpointResult> ProcessAsync(HttpContext context)
+        public async Task HandleRequest(HttpContext context)
         {
             _logger.LogTrace("Processing introspection request");
 
@@ -81,12 +80,12 @@ namespace IdentityServer4.Endpoints
 
             // caller validation
             var apiResult = await _apiSecretValidator.ValidateAsync(context);
-            if (apiResult.IsError)
+            if (apiResult.IsLeft)
             {
                 _logger.LogError("API unauthorized to call introspection endpoint. aborting");
                 return new StatusCodeResult(HttpStatusCode.Unauthorized);
             }
-            var apiResource = apiResult.Resource!;
+            var apiResource = apiResult.GetRight();
 
             var body = await context.Request.ReadFormAsync();
             if (body.Count == 0)
@@ -99,32 +98,28 @@ namespace IdentityServer4.Endpoints
 
             // request validation
             _logger.LogTrace("Calling into introspection request validator: {Type}", _requestValidator.GetType().FullName);
-            var validationResult = await _requestValidator.ValidateAsync(body.AsNameValueCollection(), apiResource);
-            if (validationResult.IsError)
+            var validationResult = await _requestValidator.ValidateAsync(body.ToNameValueDictionary(), apiResource);
+            if (validationResult.IsLeft)
             {
-                LogFailure(validationResult.Error, apiResource.Name);
-                await _events.RaiseAsync(new TokenIntrospectionFailureEvent(apiResource.Name, validationResult.Error));
+                var error = validationResult.GetLeft().Error;
+                LogFailure(error, apiResource.Name);
+                await _events.RaiseAsync(new TokenIntrospectionFailureEvent(apiResource.Name, error));
 
-                return new BadRequestResult(validationResult.Error);
+                return new BadRequestResult(error);
             }
 
             // response generation
-            _logger.LogTrace("Calling into introspection response generator: {type}", _responseGenerator.GetType().FullName);
-            var response = await _responseGenerator.ProcessAsync(validationResult);
+            _logger.LogTrace("Calling into introspection response generator: {Type}", _responseGenerator.GetType().FullName);
+            var response = await _responseGenerator.ProcessAsync(apiResource, validationResult.GetRight());
 
             // render result
-            LogSuccess(validationResult.IsActive, validationResult.Api.Name);
+            _logger.LogInformation("Success token introspection for API name: {ApiName}", apiResource.Name);
             return new IntrospectionResult(response);
-        }
-
-        void LogSuccess(bool tokenActive, string apiName)
-        {
-            _logger.LogInformation("Success token introspection. Token active: {tokenActive}, for API name: {apiName}", tokenActive, apiName);
         }
 
         void LogFailure(string error, string apiName)
         {
-            _logger.LogError("Failed token introspection: {error}, for API name: {apiName}", error, apiName);
+            _logger.LogError("Failed token introspection: {Error}, for API name: {ApiName}", error, apiName);
         }
     }
 }

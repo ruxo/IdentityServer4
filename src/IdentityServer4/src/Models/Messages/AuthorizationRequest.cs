@@ -6,6 +6,8 @@ using IdentityServer4.Validation;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
+using IdentityServer4.Extensions;
+using IdentityServer4.Validation.Models;
 
 namespace IdentityServer4.Models
 {
@@ -98,7 +100,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The parameters.
         /// </value>
-        public NameValueCollection Parameters { get; }
+        public Dictionary<string,string> Parameters { get; }
 
         /// <summary>
         /// Gets the validated contents of the request object (if present)
@@ -115,7 +117,7 @@ namespace IdentityServer4.Models
         public AuthorizationRequest()
         {
             // public for testing
-            Parameters = new NameValueCollection();
+            Parameters = new Dictionary<string,string>();
         }
 
         /// <summary>

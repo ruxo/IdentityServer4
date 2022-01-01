@@ -19,6 +19,6 @@ namespace IdentityServer4.Validation
         /// <param name="parameters">The parameters.</param>
         /// <param name="client">The client.</param>
         /// <returns></returns>
-        Task<TokenRevocationRequestValidationResult> ValidateRequestAsync(NameValueCollection parameters, Client client);
+        Task<TokenRevocationRequestValidationResult> ValidateRequestAsync(Dictionary<string,string> parameters, Client client);
     }
 }

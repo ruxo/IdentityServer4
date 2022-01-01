@@ -15,6 +15,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Validation.Default;
 
 namespace IdentityServer4.ResponseHandling
 {

@@ -2,8 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Models;
 using System.Threading.Tasks;
+using IdentityServer4.Models;
 using LanguageExt;
 
 namespace IdentityServer4.Stores
@@ -18,6 +18,6 @@ namespace IdentityServer4.Stores
         /// </summary>
         /// <param name="clientId">The client id</param>
         /// <returns>The client</returns>
-        OptionAsync<Client> FindClientByIdAsync(string clientId);
+        Task<Option<Client>> FindClientByIdAsync(string clientId);
     }
 }

@@ -2,61 +2,35 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System;
+using System.Collections.Immutable;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Models;
+
+/// <summary>
+/// Scope type
+/// </summary>
+public enum ParsedScopeType
 {
     /// <summary>
-    /// Models a parsed scope value.
+    /// Simple scope value
     /// </summary>
-    public class ParsedScopeValue
-    {
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="rawValue"></param>
-        public ParsedScopeValue(string rawValue)
-            : this(rawValue, rawValue, null)
-        {
-        }
+    Simple,
+    /// <summary>
+    /// Structure scope value
+    /// </summary>
+    Structure,
+}
 
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="rawValue"></param>
-        /// <param name="parsedName"></param>
-        /// <param name="parsedParameter"></param>
-        public ParsedScopeValue(string rawValue, string parsedName, string parsedParameter)
-        {
-            if (String.IsNullOrWhiteSpace(rawValue))
-            {
-                throw new ArgumentNullException(nameof(rawValue));
-            }
-
-            if (String.IsNullOrWhiteSpace(parsedName))
-            {
-                throw new ArgumentNullException(nameof(parsedName));
-            }
-
-            RawValue = rawValue;
-            ParsedName = parsedName;
-            ParsedParameter = parsedParameter;
-        }
-
-        /// <summary>
-        /// The original (raw) value of the scope.
-        /// </summary>
-        public string RawValue { get; set; }
-
-        /// <summary>
-        /// The parsed name of the scope. If the scope has no structure, the parsed name will be the same as the raw value.
-        /// </summary>
-        public string ParsedName { get; set; }
-
-        // future: maybe this should be something w/ more structure? dictionary?
-        /// <summary>
-        /// The parameter value of the parsed scope. If the scope has no structure, then the value will be null.
-        /// </summary>
-        public string ParsedParameter { get; set; }
-    }
+/// <summary>
+/// Models a parsed scope value.
+/// </summary>
+/// <param name="Name">The parsed name of the scope. If the scope has no structure, the parsed name will be the same as the raw value.</param>
+/// <param name="Value">The parameter value of the parsed scope. If the scope has no structure, then the value will be null.</param>
+public sealed record ParsedScopeValue(ParsedScopeType Type, string Name, ImmutableDictionary<string, string> Value)
+{
+    /// <summary>
+    /// Create a simple value
+    /// </summary>
+    public static ParsedScopeValue Create(string name) =>
+        new (ParsedScopeType.Simple, name, ImmutableDictionary<string, string>.Empty);
 }

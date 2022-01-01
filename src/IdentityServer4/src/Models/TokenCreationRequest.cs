@@ -5,6 +5,7 @@
 using IdentityServer4.Validation;
 using System;
 using System.Security.Claims;
+using IdentityServer4.Validation.Models;
 
 namespace IdentityServer4.Models
 {
@@ -83,7 +84,7 @@ namespace IdentityServer4.Models
         /// <value>
         /// The description.
         /// </value>
-        public string Description { get; set; }
+        public string? Description { get; set; }
 
         /// <summary>
         /// Called to validate the <see cref="TokenCreationRequest"/> before it is processed.

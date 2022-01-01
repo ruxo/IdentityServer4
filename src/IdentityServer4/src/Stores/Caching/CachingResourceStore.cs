@@ -6,98 +6,95 @@ using System;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
-using System.Threading.Tasks;
-using IdentityServer4.Configuration;
-using System.Collections.Generic;
 using System.Linq;
+using IdentityServer4.Configuration.DependencyInjection.Options;
 using Microsoft.Extensions.Logging;
-using RZ.Foundation.Extensions;
-using static LanguageExt.Prelude;
 
 // ReSharper disable once CheckNamespace
-namespace IdentityServer4.Stores
+namespace IdentityServer4.Stores;
+
+/// <summary>
+/// Caching decorator for IResourceStore
+/// </summary>
+/// <typeparam name="T"></typeparam>
+/// <seealso cref="IdentityServer4.Stores.IResourceStore" />
+public class CachingResourceStore<T> : IResourceStore where T : IResourceStore
 {
+    const string AllKey = "__all__";
+
+    readonly IdentityServerOptions options;
+
+    readonly ICache<IEnumerable<IdentityResource>> identityCache;
+    readonly ICache<IEnumerable<ApiResource>> apiByScopeCache;
+    readonly ICache<IEnumerable<ApiScope>> apiScopeCache;
+    readonly ICache<IEnumerable<ApiResource>> apiResourceCache;
+    readonly ICache<IEnumerable<Resource>> allCache;
+
+    readonly IResourceStore inner;
+    readonly ILogger logger;
+
     /// <summary>
-    /// Caching decorator for IResourceStore
+    /// Initializes a new instance of the <see cref="CachingResourceStore{T}"/> class.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <seealso cref="IdentityServer4.Stores.IResourceStore" />
-    public class CachingResourceStore<T> : IResourceStore
-        where T : IResourceStore
+    /// <param name="options">The options.</param>
+    /// <param name="inner">The inner.</param>
+    /// <param name="identityCache">The identity cache.</param>
+    /// <param name="apiByScopeCache">The API by scope cache.</param>
+    /// <param name="apisCache">The API cache.</param>
+    /// <param name="scopeCache"></param>
+    /// <param name="allCache">All cache.</param>
+    /// <param name="logger">The logger.</param>
+    public CachingResourceStore(IdentityServerOptions options, T inner,
+                                ICache<IEnumerable<IdentityResource>> identityCache,
+                                ICache<IEnumerable<ApiResource>> apiByScopeCache,
+                                ICache<IEnumerable<ApiResource>> apisCache,
+                                ICache<IEnumerable<ApiScope>> scopeCache,
+                                ICache<IEnumerable<Resource>> allCache,
+                                ILogger<CachingResourceStore<T>> logger)
     {
-        const string AllKey = "__all__";
+        this.options = options;
+        this.inner = inner;
+        this.identityCache = identityCache;
+        this.apiByScopeCache = apiByScopeCache;
+        apiResourceCache = apisCache;
+        apiScopeCache = scopeCache;
+        this.allCache = allCache;
+        this.logger = logger;
+    }
 
-        readonly IdentityServerOptions options;
+    static string GetKey(IEnumerable<string> names) => names.OrderBy(x => x).Join(',');
 
-        readonly ICache<IEnumerable<IdentityResource>> identityCache;
-        readonly ICache<IEnumerable<ApiResource>> apiByScopeCache;
-        readonly ICache<IEnumerable<ApiScope>> apiScopeCache;
-        readonly ICache<IEnumerable<ApiResource>> apiResourceCache;
-        readonly ICache<Resources> allCache;
+    /// <inheritdoc/>
+    public Task<IEnumerable<Resource>> GetAllResourcesAsync() =>
+        allCache.GetAsync(AllKey,
+                          options.Caching.ResourceStoreExpiration,
+                          async () => (await inner.GetAllResourcesAsync()).ToArray(),
+                          logger)
+                .GetOrThrow(() => new InvalidOperationException());
 
-        readonly IResourceStore inner;
-        readonly ILogger logger;
+    /// <inheritdoc/>
+    public Task<IEnumerable<ApiResource>> FindApiResourcesByNameAsync(IEnumerable<string> apiResourceNames) =>
+        FindItemsFromCache(apiResourceCache, inner.FindApiResourcesByNameAsync, apiResourceNames);
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CachingResourceStore{T}"/> class.
-        /// </summary>
-        /// <param name="options">The options.</param>
-        /// <param name="inner">The inner.</param>
-        /// <param name="identityCache">The identity cache.</param>
-        /// <param name="apiByScopeCache">The API by scope cache.</param>
-        /// <param name="apisCache">The API cache.</param>
-        /// <param name="scopeCache"></param>
-        /// <param name="allCache">All cache.</param>
-        /// <param name="logger">The logger.</param>
-        public CachingResourceStore(IdentityServerOptions options, T inner,
-            ICache<IEnumerable<IdentityResource>> identityCache,
-            ICache<IEnumerable<ApiResource>> apiByScopeCache,
-            ICache<IEnumerable<ApiResource>> apisCache,
-            ICache<IEnumerable<ApiScope>> scopeCache,
-            ICache<Resources> allCache,
-            ILogger<CachingResourceStore<T>> logger)
-        {
-            this.options = options;
-            this.inner = inner;
-            this.identityCache = identityCache;
-            this.apiByScopeCache = apiByScopeCache;
-            apiResourceCache = apisCache;
-            apiScopeCache = scopeCache;
-            this.allCache = allCache;
-            this.logger = logger;
-        }
+    /// <inheritdoc/>
+    public Task<IEnumerable<IdentityResource>> FindIdentityResourcesByScopeNameAsync(IEnumerable<string> names) =>
+        FindItemsFromCache(identityCache, inner.FindIdentityResourcesByScopeNameAsync, names);
 
-        static string GetKey(IEnumerable<string> names) => names.OrderBy(x => x).Join(',');
+    /// <inheritdoc/>
+    public Task<IEnumerable<ApiResource>> FindApiResourcesByScopeNameAsync(IEnumerable<string> names) =>
+        FindItemsFromCache(apiByScopeCache, inner.FindApiResourcesByScopeNameAsync, names);
 
-        /// <inheritdoc/>
-        public Task<Resources> GetAllResourcesAsync() =>
-            allCache.GetAsync(AllKey, options.Caching.ResourceStoreExpiration, inner.GetAllResourcesAsync, logger)
-                     .IfNone(() => throw new InvalidOperationException());
+    /// <inheritdoc/>
+    public Task<IEnumerable<ApiScope>> FindApiScopesByNameAsync(IEnumerable<string> scopeNames) =>
+        FindItemsFromCache(apiScopeCache, inner.FindApiScopesByNameAsync, scopeNames);
 
-        /// <inheritdoc/>
-        public Task<IEnumerable<ApiResource>> FindApiResourcesByNameAsync(IEnumerable<string> apiResourceNames) =>
-            FindItemsFromCache(apiResourceCache, inner.FindApiResourcesByNameAsync, apiResourceNames);
+    Task<IEnumerable<TA>> FindItemsFromCache<TA>(ICache<IEnumerable<TA>> cache, Func<IEnumerable<string>, Task<IEnumerable<TA>>> loader,
+                                                 IEnumerable<string>    keys)
+        where TA : class {
+        var n = Seq(keys);
+        var key = GetKey(n);
 
-        /// <inheritdoc/>
-        public Task<IEnumerable<IdentityResource>> FindIdentityResourcesByScopeNameAsync(IEnumerable<string> names) =>
-            FindItemsFromCache(identityCache, inner.FindIdentityResourcesByScopeNameAsync, names);
-
-        /// <inheritdoc/>
-        public Task<IEnumerable<ApiResource>> FindApiResourcesByScopeNameAsync(IEnumerable<string> names) =>
-            FindItemsFromCache(apiByScopeCache, inner.FindApiResourcesByScopeNameAsync, names);
-
-        /// <inheritdoc/>
-        public Task<IEnumerable<ApiScope>> FindApiScopesByNameAsync(IEnumerable<string> scopeNames) =>
-            FindItemsFromCache(apiScopeCache, inner.FindApiScopesByNameAsync, scopeNames);
-
-        Task<IEnumerable<TA>> FindItemsFromCache<TA>(ICache<IEnumerable<TA>> cache, Func<IEnumerable<string>, Task<IEnumerable<TA>>> loader,
-                                                       IEnumerable<string>    keys)
-            where TA : class {
-            var n = Seq(keys);
-            var key = GetKey(n);
-
-            return cache.GetAsync(key, options.Caching.ResourceStoreExpiration, () => loader(n), logger)
-                        .IfNone(Enumerable.Empty<TA>());
-        }
+        return cache.GetAsync(key, options.Caching.ResourceStoreExpiration, async () => Some(await loader(n)), logger)
+                    .IfNoneAsync(Enumerable.Empty<TA>());
     }
 }

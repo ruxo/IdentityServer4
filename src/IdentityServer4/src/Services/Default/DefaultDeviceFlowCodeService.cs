@@ -1,7 +1,5 @@
-using System.Threading.Tasks;
 using IdentityServer4.Models;
 using IdentityServer4.Stores;
-using LanguageExt;
 
 namespace IdentityServer4.Services.Default
 {
@@ -46,14 +44,14 @@ namespace IdentityServer4.Services.Default
         /// </summary>
         /// <param name="userCode">The user code.</param>
         /// <returns></returns>
-        public OptionAsync<DeviceCode> FindByUserCodeAsync(string userCode) => _store.FindByUserCodeAsync(userCode.Sha256());
+        public Task<Option<DeviceCode>> FindByUserCodeAsync(string userCode) => _store.FindByUserCodeAsync(userCode.Sha256());
 
         /// <summary>
         /// Finds device authorization by device code.
         /// </summary>
         /// <param name="deviceCode">The device code.</param>
         /// <returns></returns>
-        public OptionAsync<DeviceCode> FindByDeviceCodeAsync(string deviceCode) => _store.FindByDeviceCodeAsync(deviceCode.Sha256());
+        public Task<Option<DeviceCode>> FindByDeviceCodeAsync(string deviceCode) => _store.FindByDeviceCodeAsync(deviceCode.Sha256());
 
         /// <summary>
         /// Updates device authorization, searching by user code.

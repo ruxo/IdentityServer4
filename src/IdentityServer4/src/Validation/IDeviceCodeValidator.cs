@@ -2,20 +2,18 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Threading.Tasks;
+using IdentityServer4.Models;
+using IdentityServer4.Validation.Models;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation;
+
+/// <summary>
+/// The device code validator
+/// </summary>
+public interface IDeviceCodeValidator
 {
     /// <summary>
-    /// The device code validator
+    /// Validates the device code.
     /// </summary>
-    public interface IDeviceCodeValidator
-    {
-        /// <summary>
-        /// Validates the device code.
-        /// </summary>
-        /// <param name="context">The context.</param>
-        /// <returns></returns>
-        Task ValidateAsync(DeviceCodeValidationContext context);
-    }
+    Task<Either<ErrorWithCustomResponse, Unit>> ValidateAsync(Client client, string deviceCode);
 }
