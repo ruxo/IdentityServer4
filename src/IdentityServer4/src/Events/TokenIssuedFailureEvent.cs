@@ -33,7 +33,7 @@ public static class TokenIssuedFailureEvent
                 RedirectUri = request?.RedirectUri,
                 Scopes = request?.RequestedScopes.ToSpaceSeparatedString(),
                 GrantType = request?.GrantType,
-                SubjectId = request?.Subject.GetOrDefault(s => s.Identity?.IsAuthenticated) == true ? request.Subject.Get().GetSubjectId() : null,
+                SubjectId = request?.Subject.GetOrDefault(s => s.Identity?.IsAuthenticated) == true ? request.Subject.Get().GetRequiredSubjectId() : null,
                 Endpoint = EndpointNames.Authorize,
                 Error = error,
                 ErrorDescription = description

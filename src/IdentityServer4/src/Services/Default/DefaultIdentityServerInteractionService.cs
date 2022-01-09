@@ -113,7 +113,7 @@ namespace IdentityServer4.Services
             if (subject == null)
             {
                 var user = await _userSession.GetUserAsync();
-                subject = user?.GetSubjectId();
+                subject = user?.GetRequiredSubjectId();
             }
 
             if (subject == null && consent.Granted)
@@ -156,7 +156,7 @@ namespace IdentityServer4.Services
             var user = await _userSession.GetUserAsync();
             if (user != null)
             {
-                var subject = user.GetSubjectId();
+                var subject = user.GetRequiredSubjectId();
                 return await _grants.GetAllGrantsAsync(subject);
             }
 
@@ -168,7 +168,7 @@ namespace IdentityServer4.Services
             var user = await _userSession.GetUserAsync();
             if (user != null)
             {
-                var subject = user.GetSubjectId();
+                var subject = user.GetRequiredSubjectId();
                 await _grants.RemoveAllGrantsAsync(subject, clientId);
             }
         }
@@ -178,7 +178,7 @@ namespace IdentityServer4.Services
             var user = await _userSession.GetUserAsync();
             if (user != null)
             {
-                var subject = user.GetSubjectId();
+                var subject = user.GetRequiredSubjectId();
                 var sessionId = await _userSession.GetSessionIdAsync();
                 await _grants.RemoveAllGrantsAsync(subject, sessionId: sessionId);
             }

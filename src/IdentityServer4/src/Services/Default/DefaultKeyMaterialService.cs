@@ -32,9 +32,9 @@ public class DefaultKeyMaterialService : IKeyMaterialService
     }
 
     /// <inheritdoc/>
-    public async Task<Option<SigningCredentials>> GetSigningCredentialsAsync(IEnumerable<string> allowedAlgorithms)
+    public async Task<SigningCredentials> GetSigningCredentialsAsync(IEnumerable<string> allowedAlgorithms)
     {
-        if (!signingCredentialStores.Any()) return None;
+        if (!signingCredentialStores.Any()) throw new InvalidOperationException("No signing credential is configured");
         var allowed = Seq(allowedAlgorithms);
         if (!allowed.Any())
             return await signingCredentialStores.First().GetSigningCredentialsAsync();
@@ -43,8 +43,11 @@ public class DefaultKeyMaterialService : IKeyMaterialService
         if (credential.IsNone)
             throw new InvalidOperationException($"No signing credential for algorithms ({allowed.ToSpaceSeparatedString()}) registered.");
 
-        return credential;
+        return credential.Get();
     }
+
+    /// <inheritdoc />
+    public async Task<string> GetSigningAlgorithm(IEnumerable<string> allowedAlgorithms) => (await GetSigningCredentialsAsync(allowedAlgorithms)).Algorithm;
 
     /// <inheritdoc/>
     public async Task<IEnumerable<SigningCredentials>> GetAllSigningCredentialsAsync()

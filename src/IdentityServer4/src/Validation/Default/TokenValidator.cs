@@ -153,7 +153,7 @@ class TokenValidator : ITokenValidator
             if (tokenResult is ValidatedReferenceAccessToken t)
                 principal.Identities.First().AddClaim(new (JwtClaimTypes.ReferenceTokenId, t.ReferenceTokenId));
 
-            var isActive = await profile.IsActiveAsync(principal, tokenResult.Client, IdentityServerConstants.ProfileIsActiveCallers.AccessTokenValidation);
+            var isActive = await profile.IsActiveAsync(principal, tokenResult.Client);
 
             if (!isActive)
             {

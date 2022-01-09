@@ -117,7 +117,7 @@ public sealed class EndSessionRequestValidator : IEndSessionRequestValidator
             var subClaim = tokenValidationResult.Claims.FirstOrDefault(c => c.Type == JwtClaimTypes.Subject);
             if (subClaim != null && isAuthenticated)
             {
-                if (subject.GetSubjectId() != subClaim.Value)
+                if (subject.GetRequiredSubjectId() != subClaim.Value)
                 {
                     return Invalid("Current user does not match identity token", validatedRequest);
                 }

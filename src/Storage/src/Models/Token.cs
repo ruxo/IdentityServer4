@@ -15,7 +15,7 @@ namespace IdentityServer4.Models;
 /// <param name="Description">the description the user assigned to the device being authorized.</param>
 /// <param name="Confirmation">Specifies the confirmation method of the token. This value, if set, will become the cnf claim.</param>
 /// <param name="AllowedSigningAlgorithms">A list of allowed algorithm for signing the token. If null or empty, will use the default algorithm.</param>
-public sealed record Token(string Type, string ClientId, string? Description, Claim[] Claims, Option<string> Confirmation,
+public sealed record Token(string Type, string ClientId, Option<string> Description, Claim[] Claims, Option<string> Confirmation,
                            Option<string[]> AllowedSigningAlgorithms, string[] Audiences, string Issuer, DateTime CreationTime, int Lifetime,
                            AccessTokenType AccessTokenType)
 {

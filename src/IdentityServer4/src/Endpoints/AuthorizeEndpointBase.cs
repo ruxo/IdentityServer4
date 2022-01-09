@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -38,6 +39,8 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
     readonly IResourceValidator resourceValidator;
     readonly IScopeParser scopeParser;
     readonly ISystemClock clock;
+    readonly ITokenService tokenService;
+    readonly ITokenCreationService tokenCreationService;
     readonly IAuthorizationParametersMessageStore? authorizationParametersMessageStore;
 
     readonly IEventService events;
@@ -47,11 +50,13 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
     readonly IRedirectUriValidator uriValidator;
     readonly IdentityServerOptions options;
     readonly IAuthorizationCodeStore authorizationCodeStore;
+    readonly IClaimsService claimsService;
 
     protected AuthorizeEndpointBase(
         ILogger logger,
         IdentityServerOptions options,
         IAuthorizationCodeStore authorizationCodeStore,
+        IClaimsService claimsService,
         IClientStore clientStore,
         IConsentService consentService,
         IEventService events,
@@ -62,6 +67,8 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         IResourceValidator resourceValidator,
         IScopeParser scopeParser,
         ISystemClock clock,
+        ITokenService tokenService,
+        ITokenCreationService tokenCreationService,
         IUserSession userSession,
         IAuthorizationParametersMessageStore? authorizationParametersMessageStore) {
         this.events = events;
@@ -71,12 +78,15 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         this.uriValidator = uriValidator;
         this.options = options;
         this.authorizationCodeStore = authorizationCodeStore;
+        this.claimsService = claimsService;
         Logger = logger;
         this.clientStore = clientStore;
         this.consentService = consentService;
         this.resourceValidator = resourceValidator;
         this.scopeParser = scopeParser;
         this.clock = clock;
+        this.tokenService = tokenService;
+        this.tokenCreationService = tokenCreationService;
         this.authorizationParametersMessageStore = authorizationParametersMessageStore;
         UserSession = userSession;
     }
@@ -87,9 +97,9 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
 
     public abstract Task<Unit> HandleRequest(HttpContext context);
 
-    internal async Task<ApiRenderer> ProcessAuthorizeRequestAsync(ApiParameters parameters, Option<ClaimsPrincipal> user, Option<ConsentResponse> consent){
-        if (user.IsSome)
-            Logger.LogDebug("User in authorize request: {SubjectId}", user.Get(u => u.GetSubjectId()));
+    internal async Task<ApiRenderer> ProcessAuthorizeRequestAsync(ApiParameters parameters, UserSession session, Option<ConsentResponse> consent) {
+        if (session.IsAuthenticated)
+            Logger.LogDebug("User in authorize request: {SubjectId}", session.AuthenticatedUser.SubjectId);
         else
             Logger.LogDebug("No user present in authorize request");
 
@@ -103,15 +113,14 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
             throw new InvalidOperationException("Unsupported response mode", e);
         }
 
-        var subject = user.IfNone(() => new(new ClaimsIdentity()));
         try {
-            if (subject.IsAuthenticated() || !consent.Map(c => !c.Granted && c.Error.HasValue).GetOrDefault())
-                return await Render(parameters, data, subject, consent);
+            if (session.IsAuthenticated || !consent.Map(c => !c.Granted && c.Error.HasValue).GetOrDefault())
+                return await Render(parameters, data, session, consent);
 
             // special case when anonymous user has issued an error prior to authenticating
             Logger.LogInformation("Error: User consent result: {Error}", consent.GetOrDefault(c => c.Error));
 
-            return RenderAuthorizationResponse(subject, data, consent, forError: true);
+            return await RenderAuthorizationResponse(session, data, consent, forError: true);
         }
         catch (BadRequestException e) {
             await LogAndRaiseError(TokenIssuedFailureEvent.Create(e));
@@ -124,7 +133,7 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
                                   or OidcConstants.AuthorizeErrors.ConsentRequired
                                   or OidcConstants.AuthorizeErrors.InteractionRequired;
             return isSafeError
-                       ? RenderAuthorizationResponse(subject, data, consent, forError: true)
+                       ? await RenderAuthorizationResponse(session, data, consent, forError: true)
                        : RedirectToErrorPage(parameters, data.ResponseMode, data.ClientId, data.RedirectUri, new(e.Error, e.ErrorDescription.GetOrDefault()));
         }
     }
@@ -134,22 +143,12 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         await events.RaiseAsync(errorEvent);
     }
 
-    async Task<ApiRenderer> Render(ImmutableDictionary<string,StringValues> parameters, AuthContext data, ClaimsPrincipal subject, Option<ConsentResponse> consent) {
-        Option<string> tryGetSingle(string key) => parameters.Get(key).Where(s => s.Count > 0).Map(s => s[0]);
-
-        var promptModes = tryGetSingle(OidcConstants.AuthorizeRequest.Prompt).Get(ValidatePromptMode);
+    async Task<ApiRenderer> Render(ImmutableDictionary<string,StringValues> parameters, AuthContext data, UserSession session, Option<ConsentResponse> consent) {
+        // TODO check scope with requirement from the validator!
+        var promptModes = parameters.TryGetSingle(OidcConstants.AuthorizeRequest.Prompt).Get(ValidatePromptMode);
         var noUiRendering = promptModes.Contains(OidcConstants.PromptModes.None);
 
-        var (parsedScopes, invalidScopes) = scopeParser.ParseScopeValues(data.Scopes);
-        if (invalidScopes.Any())
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidScope, $"Invalid scope values: {invalidScopes.Map(i => i.Scope).Join(", ")}");
-        var (resources, invalids) = await resourceValidator.ValidateScopesWithClient(data.Client, parsedScopes);
-        if (invalids.Any())
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidScope, $"Invalid scopes: {invalids.Map(i => i.Scope).Join(", ")}");
-
-        // TODO check scope with requirement from the validator!
-
-        var loginFlow = await ShouldLogin(promptModes, subject, data.Client, data.AcrValues, data.MaxAge);
+        var loginFlow = !session.IsAuthenticated || await ShouldLogin(promptModes, session.AuthenticatedUser, data.Client, data.AcrValues, data.MaxAge);
         if (loginFlow)
         {
             if (noUiRendering)
@@ -158,48 +157,25 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
             return RenderLoginPage(parameters.Remove(OidcConstants.AuthorizeRequest.Prompt));
         }
 
-        var consentRequired = await consentService.RequiresConsentAsync(subject, data.Client, parsedScopes);
-        if (consentRequired) {
-            if (noUiRendering || !promptModes.Contains(OidcConstants.PromptModes.Consent))
-                throw AuthError(OidcConstants.AuthorizeErrors.ConsentRequired, "Error: prompt is none or not consent when consent is required");
-            if (consent.IsSome)
-                return await RenderConsentPage(consent.Get(), subject, data, resources, parsedScopes);
-            else
-                return RenderNewConsent(parameters);
-        }
+        var consentRequired = await consentService.RequiresConsentAsync(session.AuthenticatedUser.SubjectId, data.Client, data.ParsedScopes);
+        if (!consentRequired) return await RenderAuthorizationResponse(session, data, consent);
 
-        // var request = result.ValidatedRequest;
-        // LogRequest(request);
-        //
-        // // determine user interaction
-        // var interactionResult = await interactionGenerator.ProcessInteractionAsync(request, consent);
-        // if (interactionResult.IsError)
-        //     return await CreateErrorResultAsync("Interaction generator error", request, interactionResult.Error, interactionResult.ErrorDescription, false);
-        // if (interactionResult.IsLogin)
-        //     return new LoginPageResult(request);
-        // if (interactionResult.IsConsent)
-        //     return new ConsentPageResult(request);
-        // if (interactionResult.IsRedirect)
-        //     return new CustomRedirectResult(request, interactionResult.RedirectUrl);
-        //
-        // var response = await authorizeResponseGenerator.CreateResponseAsync(request);
-        //
-        // await RaiseResponseEventAsync(response);
-        //
-        // LogResponse(response);
-        //
-        // return new AuthorizeResult(response);
-        return RenderAuthorizationResponse(subject, data, consent);
+        if (noUiRendering || !promptModes.Contains(OidcConstants.PromptModes.Consent))
+            throw AuthError(OidcConstants.AuthorizeErrors.ConsentRequired, "Error: prompt is none or not consent when consent is required");
+
+        return consent.IsSome
+                   ? await RenderConsentPage(consent.Get(), session, data, data.Resources, data.ParsedScopes)
+                   : RenderNewConsent(parameters);
     }
 
-    async Task<bool> ShouldLogin(IReadOnlySet<string> promptModes, ClaimsPrincipal subject, Client client, string[] acrValues, Option<int> maxAge) =>
+    async Task<bool> ShouldLogin(IReadOnlySet<string> promptModes, AuthenticatedUser user, Client client, IEnumerable<string> acrValues, Option<int> maxAge) =>
         (promptModes.Contains(OidcConstants.PromptModes.Login) || promptModes.Contains(OidcConstants.PromptModes.SelectAccount))
-     || (!subject.IsAuthenticated() || !await profileService.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.AuthorizeEndpoint))
-     || GetIdp(acrValues).GetOrDefault(s => s != subject.GetIdentityProvider())
-     || maxAge.GetOrDefault(ma => clock.UtcNow > subject.GetAuthenticationTime().AddSeconds(ma))
-     || (!client.EnableLocalLogin && subject.GetIdentityProvider() == IdentityServerConstants.LocalIdentityProvider)
-     || (client.IdentityProviderRestrictions.Any() && !client.IdentityProviderRestrictions.Contains(subject.GetIdentityProvider()))
-     || client.UserSsoLifetime.GetOrDefault(lifetime => CheckSsoTimeout(clock.UtcNow, lifetime, subject.GetAuthenticationTimeEpoch()));
+     || !await profileService.IsActiveAsync(user.Subject, client)
+     || GetIdp(acrValues).GetOrDefault(s => s != user.IdentityProvider)
+     || maxAge.GetOrDefault(ma => clock.UtcNow > user.AuthenticationTime.AddSeconds(ma))
+     || (!client.EnableLocalLogin && user.IdentityProvider == IdentityServerConstants.LocalIdentityProvider)
+     || (client.IdentityProviderRestrictions.Any() && !client.IdentityProviderRestrictions.Contains(user.IdentityProvider))
+     || client.UserSsoLifetime.GetOrDefault(lifetime => CheckSsoTimeout(clock.UtcNow, lifetime, user.AuthenticationTimeEpoch));
 
     static bool CheckSsoTimeout(DateTimeOffset now, int userSsoLifetime, long authenticationTimeEpoch) => now.ToUnixTimeSeconds() - authenticationTimeEpoch > userSsoLifetime;
 
@@ -211,9 +187,9 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
 
     async Task<AuthContext> CreateContext(Func<string, Option<string>> tryGetSingle) {
         var responseType = tryGetSingle(OidcConstants.AuthorizeRequest.ResponseType)
-                                     .Map(ValidateResponseType)
-                                     .GetOrThrow(() => throw AuthError(OidcConstants.AuthorizeErrors.UnsupportedResponseType, "Missing response_type"));
-        var grantType = ValidateGrantType(Constants.ResponseTypeToGrantTypeMapping[responseType]);
+                          .Map(s => ResponseType.Create(s.FromSpaceSeparatedString()))
+                          .GetOrThrow(() => throw AuthError(OidcConstants.AuthorizeErrors.UnsupportedResponseType, "Missing response_type"));
+        var grantType = responseType.GetGrantType();
         var responseMode = tryGetSingle(OidcConstants.AuthorizeRequest.ResponseMode)
                                      .Map(ValidateResponseMode(grantType))
                                      .IfNone(() => Constants.AllowedResponseModesForGrantType[grantType].First());
@@ -246,7 +222,14 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         if (nonce.IsNone && grantType is GrantType.Implicit or GrantType.Hybrid && scopes.Contains(IdentityServerConstants.StandardScopes.OpenId))
             throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Nonce required for implicit and hybrid flow with openid scope");
 
-        return new(grantType, responseMode, clientId, scopes, client, acrValues, redirectUri, maxAge, state, pkce, nonce);
+        var (parsedScopes, invalidScopes) = scopeParser.ParseScopeValues(scopes);
+        if (invalidScopes.Any())
+            throw AuthError(OidcConstants.AuthorizeErrors.InvalidScope, $"Invalid scope values: {invalidScopes.Map(i => i.Scope).Join(", ")}");
+        var (resources, invalids) = await resourceValidator.ValidateScopesWithClient(client, parsedScopes);
+        if (invalids.Any())
+            throw AuthError(OidcConstants.AuthorizeErrors.InvalidScope, $"Invalid scopes: {invalids.Map(i => i.Scope).Join(", ")}");
+
+        return new(responseType, grantType, responseMode, clientId, scopes, parsedScopes, resources, client, acrValues, redirectUri, maxAge, state, pkce, nonce);
     }
 
     Func<string, string> ValidateLength(string name, int validLength) => s => {
@@ -293,39 +276,6 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         return redirectUri;
     }
 
-    string ValidateResponseType(string responseType) {
-        // The responseType may come in in an unconventional order.
-        // Use an IEqualityComparer that doesn't care about the order of multiple values.
-        // Per https://tools.ietf.org/html/rfc6749#section-3.1.1 -
-        // 'Extension response types MAY contain a space-delimited (%x20) list of
-        // values, where the order of values does not matter (e.g., response
-        // type "a b" is the same as "b a").'
-        // http://openid.net/specs/oauth-v2-multiple-response-types-1_0-03.html#terminology -
-        // 'If a response type contains one of more space characters (%20), it is compared
-        // as a space-delimited list of values in which the order of values does not matter.'
-        var comparer = new ResponseTypeEqualityComparer();
-        if (!Constants.SupportedResponseTypes.Contains(responseType, comparer))
-        {
-            Logger.LogError("Response type not supported: {ResponseType}", responseType);
-            throw AuthError(OidcConstants.AuthorizeErrors.UnsupportedResponseType, "Response type not supported");
-        }
-
-        // Even though the responseType may have come in in an unconventional order,
-        // we still need the request's ResponseType property to be set to the
-        // conventional, supported response type.
-        return Constants.SupportedResponseTypes.First( supportedResponseType => comparer.Equals(supportedResponseType, responseType));
-    }
-
-    string ValidateGrantType(string grantType) {
-        // check if flow is allowed at authorize endpoint
-        if (!Constants.AllowedGrantTypesForAuthorizeEndpoint.Contains(grantType))
-        {
-            Logger.LogError("Invalid grant type {GrantType}", grantType);
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Invalid response_type");
-        }
-        return grantType;
-    }
-
     Func<string, string> ValidateResponseMode(string grantType) => responseMode => {
         if (Constants.SupportedResponseModes.Contains(responseMode)) {
             if (Constants.AllowedResponseModesForGrantType[grantType].Contains(responseMode))
@@ -356,7 +306,7 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
 
     #region Renderer
 
-    ApiRenderer RenderRedirect(ImmutableDictionary<string, StringValues> parameters, string returnUrlParameter, string targetUrl) => async context => {
+    ApiRenderer RenderRedirect(ApiParameters parameters, string returnUrlParameter, string targetUrl) => async context => {
         async Task<Dictionary<string, StringValues>> useStoreId() {
             var msg = Message.Create(parameters.ToFullDictionary());
             var id = await authorizationParametersMessageStore.WriteAsync(msg);
@@ -374,13 +324,13 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         return Unit.Default;
     };
 
-    ApiRenderer RenderLoginPage(ImmutableDictionary<string, StringValues> parameters) =>
+    ApiRenderer RenderLoginPage(ApiParameters parameters) =>
         RenderRedirect(parameters, options.UserInteraction.LoginReturnUrlParameter, options.UserInteraction.LoginUrl);
 
     ApiRenderer RenderNewConsent(ImmutableDictionary<string, StringValues> parameters) =>
         RenderRedirect(parameters, options.UserInteraction.ConsentReturnUrlParameter, options.UserInteraction.ConsentUrl);
 
-    async Task<ApiRenderer> RenderConsentPage(ConsentResponse consent, ClaimsPrincipal subject, AuthContext data, IEnumerable<Resource> resources, ParsedScopeValue[] parsedScopes) {
+    async Task<ApiRenderer> RenderConsentPage(ConsentResponse consent, UserSession session, AuthContext data, IEnumerable<Resource> resources, ParsedScopeValue[] parsedScopes) {
         if (!consent.Granted) {
             // no need to show consent screen again
             var error = consent.Error switch{
@@ -405,25 +355,42 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
             throw AuthError(OidcConstants.AuthorizeErrors.AccessDenied, $"Error: User denied consent to required scopes: {invalidScopes.Join(", ")}");
         if (data.Client.AllowRememberConsent) {
             var rememberScopes = consent.RememberConsent ? parsedScopes : Array.Empty<ParsedScopeValue>();
-            await consentService.UpdateConsentAsync(subject, data.Client, rememberScopes);
+            await consentService.UpdateConsentAsync(session.AuthenticatedUser.SubjectId, data.Client, rememberScopes);
         }
-        return RenderAuthorizationResponse(subject, data, consent);
+        return await RenderAuthorizationResponse(session, data, consent);
     }
 
-    ApiRenderer RenderAuthorizationResponse(ClaimsPrincipal subject, AuthContext data, Option<ConsentResponse> consent, bool forError = false) {
-        if (data.GrantType == OidcConstants.GrantTypes.AuthorizationCode)
-            return RenderCodeFlowResponse(subject, data, consent, forError);
-        throw AuthError("unsupported_grant_type", $"Grant type {data.GrantType} not supported");
-    }
+    async ValueTask<ApiRenderer> RenderAuthorizationResponse(UserSession session, AuthContext data, Option<ConsentResponse> consent, bool forError = false) =>
+        data.GrantType switch{
+            GrantType.AuthorizationCode => RenderCodeFlowResponse(session, data, consent, forError),
+            GrantType.Implicit          => RenderImplicitFlowResponse(session, data, authorizationCode: None, consent.Map(c => c.Description), forError),
+            GrantType.Hybrid => RenderImplicitFlowResponse(session,
+                                                           data,
+                                                           await CreateAuthorizationCode(session, data, consent),
+                                                           consent.Map(c => c.Description),
+                                                           forError),
+            _ => throw AuthError("unsupported_grant_type", $"Grant type {data.GrantType} not supported")
+        };
 
-    ApiRenderer RenderCodeFlowResponse(ClaimsPrincipal subject, AuthContext data, Option<ConsentResponse> consent, bool forError) => async context => {
-        var sessionId = subject.IsAuthenticated()
-                            ? await UserSession.GetSessionIdAsync().IfNoneAsync(() => string.Empty)
-                            : string.Empty;
+    ApiRenderer RenderCodeFlowResponse(UserSession session, AuthContext data, Option<ConsentResponse> consent, bool forError) => async context => {
+        Debug.Assert(session.IsAuthenticated);
+        var id = await CreateAuthorizationCode(session, data, consent);
+
+        var response = SessionStateToResponseDict(data.ClientId, data.RedirectUri, session.SessionId.Get())
+                      .Append(("code", id))
+                      .ToImmutableDictionary();
+
+        await UserSession.AddClientIdAsync(data.ClientId);
+
+        return await ReturnResponse(forError, data.ResponseMode, data.RedirectUri, response)(context);
+    };
+
+    async Task<string> CreateAuthorizationCode(UserSession session, AuthContext data, Option<ConsentResponse> consent) {
+        var sessionId = session.SessionId.Get();
         var code = new AuthorizationCode(clock.UtcNow.UtcDateTime,
                                          data.ClientId,
                                          data.Client.AuthorizationCodeLifetime,
-                                         subject,
+                                         session.AuthenticatedUser.SubjectId,
                                          sessionId,
                                          consent.Map(c => c.Description),
                                          data.Pkce,
@@ -431,19 +398,84 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
                                          data.Scopes.ToArray(),
                                          data.RedirectUri,
                                          data.Nonce,
-                                         await data.State.MapT(s => GetStateHash(data.Client, s)),
+                                         await data.State.MapTV(s => GetStateHash(data.Client.AllowedIdentityTokenSigningAlgorithms, s)),
                                          consent.IsSome);
-        var id = await authorizationCodeStore.StoreAuthorizationCodeAsync(code);
+        return await authorizationCodeStore.StoreAuthorizationCodeAsync(code);
+    }
 
-        var response = new Dictionary<string, string>{
-            { "code", id },
-            { "session_state", GenerateSessionStateValue(data.ClientId, sessionId, data.RedirectUri) }
-        }.ToImmutableDictionary();
+    ApiRenderer RenderImplicitFlowResponse(UserSession session, AuthContext data, Option<string> authorizationCode, Option<string> description, bool forError) => async context => {
+        Debug.Assert(session.IsAuthenticated);
+        var sessionId = session.SessionId.Get();
+        var accessToken = data.ResponseType.HasToken
+                              ? Some(await tokenService.CreateAccessTokenAsync(session.AuthenticatedUser,
+                                                                               sessionId,
+                                                                               data.Client,
+                                                                               data.Scopes,
+                                                                               data.Resources,
+                                                                               confirmation: None,
+                                                                               description))
+                              : None;
+        var accessTokenValue = await accessToken.MapT(tokenService.CreateSecurityTokenAsync)
+                                                .Map(token => (token, accessToken.Get().Lifetime));
 
-        await UserSession.AddClientIdAsync(data.ClientId);
+        var jwt = data.ResponseType.HasIdToken ? Some(await GetJwt(session, data, accessTokenValue, authorizationCode, context)) : None;
+
+        var response = AccessTokenToResponseDict(accessTokenValue)
+                      .Concat(jwt.Map(v => ("id_token", v)))
+                      .Concat(SessionStateToResponseDict(data.ClientId, data.RedirectUri, sessionId))
+                      .Concat(authorizationCode.Map(ac => ("code", ac)))
+                      .ToImmutableDictionary();
 
         return await ReturnResponse(forError, data.ResponseMode, data.RedirectUri, response)(context);
     };
+
+    #region Parameter to Response value conversions
+
+    static IEnumerable<(string Key, string Value)> AccessTokenToResponseDict(Option<(string Token, int Lifetime)> accessToken) {
+        if (accessToken.IsNone) yield break;
+        var (token, lifetime) = accessToken.Get();
+        yield return ("access_token", token);
+        yield return ("token_type", "Bearer");
+        yield return ("expires_in", lifetime.ToString());
+    }
+
+    static IEnumerable<(string, string)> SessionStateToResponseDict(string clientId, string redirectUri, Option<string> sessionId) {
+        if (sessionId.IsSome) yield return ("session_state", GenerateSessionStateValue(clientId, sessionId.Get(), redirectUri));
+    }
+
+    #endregion
+
+    async Task<string> GetJwt(UserSession session, AuthContext data, Option<(string Token,int Lifetime)> authToken, Option<string> authorizationCode, HttpContext context) {
+        // TODO: Dom, add a test for this. validate the at and c hashes are correct for the id_token when the client's alg doesn't match the server default.
+        var allowedSignInAlgorithms = data.Client.AllowedIdentityTokenSigningAlgorithms;
+        var algorithm = await keyMaterialService.GetSigningAlgorithm(allowedSignInAlgorithms);
+
+        string createHash(string s) => CryptoHelper.CreateHashClaimValue(s, algorithm);
+        Func<string, Claim> createHashClaim(string claimType) => s => new(claimType, createHash(s));
+
+        var tokenHash = authToken.Map(i => i.Token).Map(createHashClaim(JwtClaimTypes.AccessTokenHash));
+        var authCodeToken = authorizationCode.Map(createHashClaim(JwtClaimTypes.AuthorizationCodeHash));
+        var stateHash = data.State.Map(createHashClaim(JwtClaimTypes.StateHash));
+        var sessionId = session.SessionId.Map(s => new Claim(JwtClaimTypes.SessionId, s));
+
+        var identityClaims = await claimsService.GetIdentityTokenClaimsAsync(session, data.Client, data.Resources, includeAllIdentityClaims: !data.ResponseType.AccessTokenNeeded);
+        var claims = data.Nonce.Map(n => new Claim(JwtClaimTypes.Nonce, n))
+                         .Append(new Claim(JwtClaimTypes.IssuedAt, clock.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64))
+                         .Concat(tokenHash)
+                         .Concat(authCodeToken)
+                         .Concat(stateHash)
+                         .Concat(sessionId)
+                         .Concat(identityClaims)
+                         .ToArray();
+        var issuer = context.GetIdentityServerIssuerUri();
+        return await tokenCreationService.CreateTokenAsync(OidcConstants.TokenTypes.IdentityToken,
+                                                           allowedSignInAlgorithms,
+                                                           issuer,
+                                                           data.Client.IdentityTokenLifetime,
+                                                           new[]{ data.Client.ClientId },
+                                                           claims,
+                                                           None);
+    }
 
     ApiRenderer ReturnResponse(bool forError, string responseMode, string redirectUri, ResponseDict response) => async context => {
         switch (responseMode) {
@@ -511,11 +543,9 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         return forError && uri.Fragment == null ? uri.SetFragment("_=_") : uri;
     }
 
-    async Task<string> GetStateHash(Client client, string state) {
-        var credential = await keyMaterialService.GetSigningCredentialsAsync(client.AllowedIdentityTokenSigningAlgorithms);
-        if (credential.IsNone)
-            throw new InvalidOperationException("No signing credential is configured.");
-        return CryptoHelper.CreateHashClaimValue(state, credential.Get().Algorithm);
+    async ValueTask<string> GetStateHash(IEnumerable<string> allowedAlgorithms, string state) {
+        var algorithm = await keyMaterialService.GetSigningAlgorithm(allowedAlgorithms);
+        return CryptoHelper.CreateHashClaimValue(state, algorithm);
     }
 
     static string GenerateSessionStateValue(string clientId, string sessionId, string redirectUri) {
@@ -532,6 +562,7 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
 
     static Exception AuthError(string error, string? description = null) => new BadRequestException(error, description);
 
-    sealed record AuthContext(string GrantType, string ResponseMode, string ClientId, ImmutableHashSet<string> Scopes, Client Client, string[] AcrValues,
-                              string RedirectUri, Option<int> MaxAge, Option<string> State, Option<PkceData> Pkce, Option<string> Nonce);
+    sealed record AuthContext(ResponseType ResponseType, string GrantType, string ResponseMode, string ClientId, ImmutableHashSet<string> Scopes, ParsedScopeValue[] ParsedScopes,
+                              Resource[] Resources, Client Client, string[] AcrValues, string RedirectUri, Option<int> MaxAge, Option<string> State, Option<PkceData> Pkce,
+                              Option<string> Nonce);
 }

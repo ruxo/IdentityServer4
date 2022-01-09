@@ -16,7 +16,7 @@ namespace IdentityServer4.Configuration
         /// Sets the cookie authentication scheme configured by the host used for interactive users. If not set, the scheme will inferred from the host's default authentication scheme.
         /// This setting is typically used when AddPolicyScheme is used in the host as the default scheme.
         /// </summary>
-        public string CookieAuthenticationScheme { get; set; }
+        public string? CookieAuthenticationScheme { get; set; }
 
         /// <summary>
         /// Sets the cookie lifetime (only effective if the IdentityServer-provided cookie handler is used)
@@ -27,7 +27,7 @@ namespace IdentityServer4.Configuration
         /// Specified if the cookie should be sliding or not (only effective if the built-in cookie middleware is used)
         /// </summary>
         public bool CookieSlidingExpiration { get; set; } = false;
-        
+
         /// <summary>
         /// Specifies the SameSite mode for the internal authentication and temp cookie
         /// </summary>
@@ -45,7 +45,7 @@ namespace IdentityServer4.Configuration
         /// Gets or sets the name of the cookie used for the check session endpoint.
         /// </summary>
         public string CheckSessionCookieName { get; set; } = IdentityServerConstants.DefaultCheckSessionCookieName;
-        
+
         /// <summary>
         /// Gets or sets the domain of the cookie used for the check session endpoint. Defaults to null.
         /// </summary>

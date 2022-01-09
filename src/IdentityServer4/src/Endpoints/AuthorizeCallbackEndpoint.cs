@@ -58,7 +58,7 @@ class AuthorizeCallbackEndpoint : AuthorizeEndpointBase
         }
 
         var user = await UserSession.GetUserAsync();
-        var consentRequest = new ConsentRequest(parameters, user.Get().GetSubjectId());
+        var consentRequest = new ConsentRequest(parameters, user.GetRequiredSubjectId());
         var consent = await consentResponseStore.ReadAsync(consentRequest.Id);
 
         try

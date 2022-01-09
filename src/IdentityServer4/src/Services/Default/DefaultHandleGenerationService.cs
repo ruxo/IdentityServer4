@@ -4,22 +4,18 @@
 
 using IdentityModel;
 
-namespace IdentityServer4.Services
+namespace IdentityServer4.Services.Default;
+
+/// <summary>
+/// Default handle generation service
+/// </summary>
+/// <seealso cref="IdentityServer4.Services.IHandleGenerationService" />
+public class DefaultHandleGenerationService : IHandleGenerationService
 {
     /// <summary>
-    /// Default handle generation service
+    /// Generates a handle.
     /// </summary>
-    /// <seealso cref="IdentityServer4.Services.IHandleGenerationService" />
-    public class DefaultHandleGenerationService : IHandleGenerationService
-    {
-        /// <summary>
-        /// Generates a handle.
-        /// </summary>
-        /// <param name="length">The length.</param>
-        /// <returns></returns>
-        public Task<string> GenerateAsync(int length)
-        {
-            return Task.FromResult(CryptoRandom.CreateUniqueId(length, CryptoRandom.OutputFormat.Hex));
-        }
-    }
+    /// <param name="length">The length.</param>
+    /// <returns></returns>
+    public ValueTask<string> GenerateAsync(int length) => ValueTask.FromResult(CryptoRandom.CreateUniqueId(length, CryptoRandom.OutputFormat.Hex));
 }

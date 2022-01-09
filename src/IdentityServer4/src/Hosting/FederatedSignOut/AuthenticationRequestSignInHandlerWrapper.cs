@@ -3,25 +3,23 @@
 
 
 using System.Security.Claims;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace IdentityServer4.Hosting.FederatedSignOut
+namespace IdentityServer4.Hosting.FederatedSignOut;
+
+class AuthenticationRequestSignInHandlerWrapper : AuthenticationRequestSignOutHandlerWrapper, IAuthenticationSignInHandler
 {
-    internal class AuthenticationRequestSignInHandlerWrapper : AuthenticationRequestSignOutHandlerWrapper, IAuthenticationSignInHandler
+    readonly IAuthenticationSignInHandler inner;
+
+    public AuthenticationRequestSignInHandlerWrapper(IAuthenticationSignInHandler inner, IHttpContextAccessor httpContextAccessor)
+        : base(inner, httpContextAccessor)
     {
-        private readonly IAuthenticationSignInHandler _inner;
+        this.inner = inner;
+    }
 
-        public AuthenticationRequestSignInHandlerWrapper(IAuthenticationSignInHandler inner, IHttpContextAccessor httpContextAccessor)
-            : base(inner, httpContextAccessor)
-        {
-            _inner = inner;
-        }
-
-        public Task SignInAsync(ClaimsPrincipal user, AuthenticationProperties properties)
-        {
-            return _inner.SignInAsync(user, properties);
-        }
+    public Task SignInAsync(ClaimsPrincipal user, AuthenticationProperties? properties)
+    {
+        return inner.SignInAsync(user, properties);
     }
 }

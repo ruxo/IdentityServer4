@@ -112,7 +112,7 @@ public class DefaultGrantStore<T>
     /// <param name="created">The created.</param>
     /// <param name="lifetime">The lifetime.</param>
     /// <returns></returns>
-    protected virtual async Task<string> CreateItemAsync(T item, string clientId, string subjectId, Option<string> sessionId, string? description, DateTime created, int lifetime)
+    protected virtual async Task<string> CreateItemAsync(T item, string clientId, string subjectId, Option<string> sessionId, Option<string> description, DateTime created, int lifetime)
     {
         var handle = await HandleGenerationService.GenerateAsync();
         await StoreItemAsync(handle, item, clientId, subjectId, sessionId, description, created, created.AddSeconds(lifetime), None);
@@ -132,7 +132,7 @@ public class DefaultGrantStore<T>
     /// <param name="expiration">The expiration.</param>
     /// <param name="consumedTime">The consumed time.</param>
     /// <returns></returns>
-    protected virtual Task StoreItemAsync(string key, T item, string clientId, string subjectId, Option<string> sessionId, string? description, DateTime created,
+    protected virtual Task StoreItemAsync(string key, T item, string clientId, string subjectId, Option<string> sessionId, Option<string> description, DateTime created,
                                           DateTime expiration, Option<DateTime> consumedTime) =>
         Store.StoreAsync(new(GetHashedKey(key),
                              GrantType,

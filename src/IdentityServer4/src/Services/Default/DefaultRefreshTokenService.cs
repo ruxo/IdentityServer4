@@ -109,11 +109,11 @@ namespace IdentityServer4.Services
             }
 
             // make sure user is enabled
-            var isActive = await Profile.IsActiveAsync(refreshToken.Subject, client, IdentityServerConstants.ProfileIsActiveCallers.RefreshTokenValidation);
+            var isActive = await Profile.IsActiveAsync(refreshToken.Subject, client);
 
             if (!isActive)
             {
-                Logger.LogError("{SubjectId} has been disabled", refreshToken.Subject.GetSubjectId());
+                Logger.LogError("{SubjectId} has been disabled", refreshToken.Subject.GetRequiredSubjectId());
                 return invalidGrant;
             }
             return refreshToken;

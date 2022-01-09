@@ -3,7 +3,6 @@
 
 
 using System;
-using System.Security.Claims;
 
 namespace IdentityServer4.Models;
 
@@ -21,8 +20,8 @@ public sealed record PkceData(string CodeChallenge, string CodeChallengeMethod);
 /// <param name="Description">the description the user assigned to the device being authorized.</param>
 /// <param name="IsOpenId">a value indicating whether this code is an OpenID Connect code.</param>
 /// <param name="StateHash">the hashed state (to output s_hash claim).</param>
-public sealed record AuthorizationCode(DateTime CreationTime, string ClientId, int Lifetime, ClaimsPrincipal Subject, string SessionId, Option<string> Description,
-                                       Option<PkceData> pkce, bool IsOpenId, string[] RequestedScopes, string RedirectUri,
+public sealed record AuthorizationCode(DateTime CreationTime, string ClientId, int Lifetime, string SubjectId, string SessionId, Option<string> Description,
+                                       Option<PkceData> Pkce, bool IsOpenId, string[] RequestedScopes, string RedirectUri,
                                        Option<string> Nonce, Option<string> StateHash, bool WasConsentShown) : IAuthorizationModel
 {
     /// <inheritdoc />

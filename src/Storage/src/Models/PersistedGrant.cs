@@ -11,5 +11,5 @@ namespace IdentityServer4.Models;
 /// A model for a persisted grant
 /// </summary>
 /// <param name="Description">the description the user assigned to the device being authorized.</param>
-public sealed record PersistedGrant(string Key, string Type, string ClientId, string SubjectId, Option<string> SessionId, string? Description,
+public sealed record PersistedGrant(string Key, string Type, string ClientId, string SubjectId, Option<string> SessionId, Option<string> Description,
                                     DateTime CreationTime, DateTime Expiration, Option<DateTime> ConsumedTime, string Data);

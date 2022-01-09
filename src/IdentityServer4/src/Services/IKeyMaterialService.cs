@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System;
 using IdentityServer4.Models;
 using Microsoft.IdentityModel.Tokens;
 
@@ -24,7 +25,16 @@ public interface IKeyMaterialService
     /// <param name="allowedAlgorithms">Collection of algorithms used to filter the server supported algorithms.
     /// A value of null or empty indicates that the server default should be returned.</param>
     /// <returns></returns>
-    Task<Option<SigningCredentials>> GetSigningCredentialsAsync(IEnumerable<string> allowedAlgorithms);
+    /// <exception cref="InvalidOperationException">No credential found</exception>
+    Task<SigningCredentials> GetSigningCredentialsAsync(IEnumerable<string> allowedAlgorithms);
+
+    /// <summary>
+    /// Get the signing credential's algorithm.
+    /// </summary>
+    /// <param name="allowedAlgorithms">Collection of algorithms used to filter the server supported algorithms.
+    /// A value of empty indicates that the server default should be returned.</param>
+    /// <returns></returns>
+    Task<string> GetSigningAlgorithm(IEnumerable<string> allowedAlgorithms);
 
     /// <summary>
     /// Gets all signing credentials.

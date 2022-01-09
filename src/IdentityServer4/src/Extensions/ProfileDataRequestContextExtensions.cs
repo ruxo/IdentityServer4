@@ -23,7 +23,7 @@ public static class ProfileDataRequestContextExtensions
     /// <returns></returns>
     [Pure]
     public static IEnumerable<Claim> FilterClaims(this ProfileDataRequestContext context, IEnumerable<Claim> claims) =>
-        claims.Where(x => context.RequestedClaimTypes.Contains(x.Type));
+        claims.IntersectBy(context.RequestedClaimTypes, c => c.Type);
 
     /// <summary>
     /// Logs the profile request.
@@ -32,7 +32,7 @@ public static class ProfileDataRequestContextExtensions
     /// <param name="logger">The logger.</param>
     public static void LogProfileRequest(this ProfileDataRequestContext context, ILogger logger) =>
         logger.LogDebug("Get profile called for subject {Subject} from client {Client} with claim types {ClaimTypes} via {Caller}",
-                        context.Subject.GetSubjectId(),
+                        context.Subject.GetRequiredSubjectId(),
                         context.Client.ClientName ?? context.Client.ClientId,
                         context.RequestedClaimTypes,
                         context.Caller);

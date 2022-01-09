@@ -38,7 +38,7 @@ class AuthorizeEndpoint : AuthorizeEndpointBase
         else
             return context.ReturnStatusCode(HttpStatusCode.MethodNotAllowed);
 
-        var user = await UserSession.GetUserAsync();
+        var user = await UserSession.GetCurrentSession();
         var renderer = await ProcessAuthorizeRequestAsync(values, user, None);
         return await renderer(context);
     }

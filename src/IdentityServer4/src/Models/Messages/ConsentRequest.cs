@@ -5,6 +5,7 @@
 using IdentityModel;
 using IdentityServer4.Extensions;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Security.Cryptography;
@@ -35,7 +36,7 @@ namespace IdentityServer4.Models
         /// </summary>
         /// <param name="parameters">The parameters.</param>
         /// <param name="subject">The subject.</param>
-        public ConsentRequest(Dictionary<string,string> parameters, string subject)
+        public ConsentRequest(ApiParameters parameters, string subject)
         {
             ClientId = parameters[OidcConstants.AuthorizeRequest.ClientId];
             Nonce = parameters[OidcConstants.AuthorizeRequest.Nonce];

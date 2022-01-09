@@ -4,7 +4,6 @@
 
 using System.Security.Claims;
 using IdentityServer4.Models;
-using IdentityServer4.Models.Contexts;
 
 namespace IdentityServer4.Services;
 
@@ -16,13 +15,12 @@ public interface IProfileService
     /// <summary>
     /// This method is called whenever claims about the user are requested (e.g. during token creation or via the userinfo endpoint)
     /// </summary>
-    /// <param name="context">The context.</param>
     /// <returns></returns>
-    Task<IEnumerable<Claim>> GetIssuedClaims(ProfileDataRequestContext context);
+    Task<IEnumerable<Claim>> GetIssuedClaims(IEnumerable<string> allowedClaims, UserSession session);
 
     /// <summary>
     /// This method gets called whenever identity server needs to determine if the user is valid or active (e.g. if the user's account has been deactivated since they logged in).
     /// (e.g. during token issuance or validation).
     /// </summary>
-    Task<bool> IsActiveAsync(ClaimsPrincipal subject, Client client, string caller);
+    Task<bool> IsActiveAsync(ClaimsPrincipal subject, Client client);
 }

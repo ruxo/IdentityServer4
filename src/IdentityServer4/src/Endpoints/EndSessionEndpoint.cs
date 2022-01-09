@@ -12,59 +12,58 @@ using IdentityServer4.Validation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-namespace IdentityServer4.Endpoints
+namespace IdentityServer4.Endpoints;
+
+class EndSessionEndpoint : IEndpointHandler
 {
-    internal class EndSessionEndpoint : IEndpointHandler
+    readonly IEndSessionRequestValidator endSessionRequestValidator;
+
+    readonly ILogger logger;
+
+    readonly IUserSession userSession;
+
+    public EndSessionEndpoint(
+        IEndSessionRequestValidator endSessionRequestValidator,
+        IUserSession userSession,
+        ILogger<EndSessionEndpoint> logger)
     {
-        private readonly IEndSessionRequestValidator _endSessionRequestValidator;
+        this.endSessionRequestValidator = endSessionRequestValidator;
+        this.userSession = userSession;
+        this.logger = logger;
+    }
 
-        private readonly ILogger _logger;
-
-        private readonly IUserSession _userSession;
-
-        public EndSessionEndpoint(
-            IEndSessionRequestValidator endSessionRequestValidator,
-            IUserSession userSession,
-            ILogger<EndSessionEndpoint> logger)
+    public async Task HandleRequest(HttpContext context)
+    {
+        Dictionary<string,string> parameters;
+        if (HttpMethods.IsGet(context.Request.Method))
         {
-            _endSessionRequestValidator = endSessionRequestValidator;
-            _userSession = userSession;
-            _logger = logger;
+            parameters = context.Request.Query.ToNameValueDictionary();
+        }
+        else if (HttpMethods.IsPost(context.Request.Method))
+        {
+            parameters = (await context.Request.ReadFormAsync()).ToNameValueDictionary();
+        }
+        else
+        {
+            logger.LogWarning("Invalid HTTP method for end session endpoint.");
+            return new StatusCodeResult(HttpStatusCode.MethodNotAllowed);
         }
 
-        public async Task HandleRequest(HttpContext context)
+        var user = await userSession.GetUserAsync();
+
+        logger.LogDebug("Processing signout request for {subjectId}", user.GetRequiredSubjectId() ?? "anonymous");
+
+        var result = await endSessionRequestValidator.ValidateAsync(parameters, user);
+
+        if (result.IsError)
         {
-            Dictionary<string,string> parameters;
-            if (HttpMethods.IsGet(context.Request.Method))
-            {
-                parameters = context.Request.Query.ToNameValueDictionary();
-            }
-            else if (HttpMethods.IsPost(context.Request.Method))
-            {
-                parameters = (await context.Request.ReadFormAsync()).ToNameValueDictionary();
-            }
-            else
-            {
-                _logger.LogWarning("Invalid HTTP method for end session endpoint.");
-                return new StatusCodeResult(HttpStatusCode.MethodNotAllowed);
-            }
-
-            var user = await _userSession.GetUserAsync();
-
-            _logger.LogDebug("Processing signout request for {subjectId}", user?.GetSubjectId() ?? "anonymous");
-
-            var result = await _endSessionRequestValidator.ValidateAsync(parameters, user);
-
-            if (result.IsError)
-            {
-                _logger.LogError("Error processing end session request {error}", result.Error);
-            }
-            else
-            {
-                _logger.LogDebug("Success validating end session request from {clientId}", result.ValidatedRequest?.Client?.ClientId);
-            }
-
-            return new EndSessionResult(result);
+            logger.LogError("Error processing end session request {error}", result.Error);
         }
+        else
+        {
+            logger.LogDebug("Success validating end session request from {clientId}", result.ValidatedRequest?.Client?.ClientId);
+        }
+
+        return new EndSessionResult(result);
     }
 }

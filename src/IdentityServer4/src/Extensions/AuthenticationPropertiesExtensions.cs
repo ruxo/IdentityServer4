@@ -5,11 +5,8 @@
 using IdentityModel;
 using Microsoft.AspNetCore.Authentication;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using LanguageExt;
-using static LanguageExt.Prelude;
 
 namespace IdentityServer4.Extensions
 {
@@ -93,7 +90,7 @@ namespace IdentityServer4.Extensions
         }
 
 
-        private static IEnumerable<string> DecodeList(string value)
+        static IEnumerable<string> DecodeList(string value)
         {
             if (value.IsPresent())
             {
@@ -105,7 +102,7 @@ namespace IdentityServer4.Extensions
             return Enumerable.Empty<string>();
         }
 
-        private static string EncodeList(IEnumerable<string> list)
+        static string EncodeList(IEnumerable<string> list)
         {
             if (list != null && list.Any())
             {

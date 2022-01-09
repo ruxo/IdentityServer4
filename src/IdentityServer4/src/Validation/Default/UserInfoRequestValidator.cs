@@ -74,11 +74,11 @@ class UserInfoRequestValidator : IUserInfoRequestValidator
         var subject = Principal.Create("UserInfo", claims.ToArray());
 
         // make sure user is still active
-        var isActive = await profile.IsActiveAsync(subject, tokenResult.Client, IdentityServerConstants.ProfileIsActiveCallers.UserInfoRequestValidation);
+        var isActive = await profile.IsActiveAsync(subject, tokenResult.Client);
 
         if (!isActive)
         {
-            logger.LogError("User is not active: {sub}", subject.GetSubjectId());
+            logger.LogError("User is not active: {sub}", subject.GetRequiredSubjectId());
 
             return new UserInfoRequestValidationResult
             {

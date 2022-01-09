@@ -47,7 +47,7 @@ namespace Microsoft.Extensions.DependencyInjection
         /// <returns></returns>
         public static IIdentityServerBuilder AddRequiredPlatformServices(this IIdentityServerBuilder builder)
         {
-            builder.Services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();            
+            builder.Services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             builder.Services.AddOptions();
             builder.Services.AddSingleton(
                 resolver => resolver.GetRequiredService<IOptions<IdentityServerOptions>>().Value);
@@ -218,7 +218,7 @@ namespace Microsoft.Extensions.DependencyInjection
             // optional
             builder.Services.TryAddTransient<ICustomTokenValidator, DefaultCustomTokenValidator>();
             builder.Services.TryAddTransient<ICustomAuthorizeRequestValidator, DefaultCustomAuthorizeRequestValidator>();
-            
+
             return builder;
         }
 
@@ -233,7 +233,6 @@ namespace Microsoft.Extensions.DependencyInjection
             builder.Services.TryAddTransient<IUserInfoResponseGenerator, UserInfoResponseGenerator>();
             builder.Services.TryAddTransient<IIntrospectionResponseGenerator, IntrospectionResponseGenerator>();
             builder.Services.TryAddTransient<IAuthorizeInteractionResponseGenerator, AuthorizeInteractionResponseGenerator>();
-            builder.Services.TryAddTransient<IAuthorizeResponseGenerator, AuthorizeResponseGenerator>();
             builder.Services.TryAddTransient<IDiscoveryResponseGenerator, DiscoveryResponseGenerator>();
             builder.Services.TryAddTransient<ITokenRevocationResponseGenerator, TokenRevocationResponseGenerator>();
             builder.Services.TryAddTransient<IDeviceAuthorizationResponseGenerator, DeviceAuthorizationResponseGenerator>();

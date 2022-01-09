@@ -272,7 +272,7 @@ class TokenRequestValidator : ITokenRequestValidator
 
         // make sure user is enabled
         var subject = authorizationCode.Subject.Get();
-        var isActive = await profile.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.AuthorizationCodeValidation);
+        var isActive = await profile.IsActiveAsync(subject, client);
 
         if (!isActive)
         {
@@ -379,11 +379,11 @@ class TokenRequestValidator : ITokenRequestValidator
         var resourceResult = result.GetRight();
 
         // make sure user is enabled
-        var isActive = await profile.IsActiveAsync(resourceResult.Subject, client, IdentityServerConstants.ProfileIsActiveCallers.ResourceOwnerValidation);
+        var isActive = await profile.IsActiveAsync(resourceResult.Subject, client);
 
         if (!isActive)
         {
-            LogError(validatedRequest, "User has been disabled", new { subjectId = resourceResult.Subject.GetSubjectId() });
+            LogError(validatedRequest, "User has been disabled", new { subjectId = resourceResult.Subject.GetRequiredSubjectId() });
             await RaiseFailedResourceOwnerAuthenticationEventAsync(userName, "user is inactive", client.ClientId);
 
             return Invalid(OidcConstants.TokenErrors.InvalidGrant);
@@ -392,7 +392,7 @@ class TokenRequestValidator : ITokenRequestValidator
         validatedRequest.UserName = userName;
         validatedRequest.Subject  = resourceResult.Subject;
 
-        await RaiseSuccessfulResourceOwnerAuthenticationEventAsync(userName, resourceResult.Subject.GetSubjectId(), client.ClientId);
+        await RaiseSuccessfulResourceOwnerAuthenticationEventAsync(userName, resourceResult.Subject.GetRequiredSubjectId(), client.ClientId);
         logger.LogDebug("Resource owner password token request validation success");
         return Valid();
     }
@@ -502,12 +502,12 @@ class TokenRequestValidator : ITokenRequestValidator
         var subject = result.GetRight().Subject;
 
         // make sure user is enabled
-        var isActive = await profile.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.ExtensionGrantValidation);
+        var isActive = await profile.IsActiveAsync(subject, client);
 
         if (!isActive) {
             // todo: raise event?
 
-            LogError(validatedRequest, "User has been disabled", new{ subjectId = subject.GetSubjectId() });
+            LogError(validatedRequest, "User has been disabled", new{ subjectId = subject.GetRequiredSubjectId() });
             return Invalid(OidcConstants.TokenErrors.InvalidGrant);
         }
 

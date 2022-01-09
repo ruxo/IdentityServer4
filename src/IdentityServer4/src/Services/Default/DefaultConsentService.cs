@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System;
 using System.Linq;
-using System.Security.Claims;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Stores;
@@ -51,7 +49,7 @@ public sealed class DefaultConsentService : IConsentService
     /// <summary>
     /// Checks if consent is required.
     /// </summary>
-    /// <param name="subject">The user.</param>
+    /// <param name="subjectId"></param>
     /// <param name="client">The client.</param>
     /// <param name="parsedScopes">The parsed scopes.</param>
     /// <returns>
@@ -62,7 +60,7 @@ public sealed class DefaultConsentService : IConsentService
     /// or
     /// subject
     /// </exception>
-    public async Task<bool> RequiresConsentAsync(ClaimsPrincipal subject, Client client, IEnumerable<ParsedScopeValue> parsedScopes) {
+    public async Task<bool> RequiresConsentAsync(string subjectId, Client client, IEnumerable<ParsedScopeValue> parsedScopes) {
         var ps = Seq(parsedScopes);
         if (!client.RequireConsent)
         {
@@ -98,7 +96,7 @@ public sealed class DefaultConsentService : IConsentService
             return true;
         }
 
-        var cs = await userConsentStore.GetUserConsentAsync(subject.GetSubjectId(), client.ClientId);
+        var cs = await userConsentStore.GetUserConsentAsync(subjectId, client.ClientId);
 
         if (cs.IsNone)
         {
@@ -135,8 +133,8 @@ public sealed class DefaultConsentService : IConsentService
     /// <summary>
     /// Updates the consent asynchronous.
     /// </summary>
+    /// <param name="subjectId1"></param>
     /// <param name="client">The client.</param>
-    /// <param name="subject">The subject.</param>
     /// <param name="parsedScopes">The parsed scopes.</param>
     /// <returns></returns>
     /// <exception cref="System.ArgumentNullException">
@@ -144,20 +142,16 @@ public sealed class DefaultConsentService : IConsentService
     /// or
     /// subject
     /// </exception>
-    public async Task UpdateConsentAsync(ClaimsPrincipal subject, Client client, IEnumerable<ParsedScopeValue> parsedScopes)
+    public async Task UpdateConsentAsync(string subjectId, Client client, IEnumerable<ParsedScopeValue> parsedScopes)
     {
-        if (client == null) throw new ArgumentNullException(nameof(client));
-        if (subject == null) throw new ArgumentNullException(nameof(subject));
-
         if (client.AllowRememberConsent)
         {
-            var subjectId = subject.GetSubjectId();
             var clientId = client.ClientId;
 
             var scopes = parsedScopes.Select(x => x.Name).ToArray();
             if (scopes.Any())
             {
-                logger.LogDebug("Client allows remembering consent, and consent given. Updating consent store for subject: {Subject}", subject.GetSubjectId());
+                logger.LogDebug("Client allows remembering consent, and consent given. Updating consent store for subject: {Subject}", subjectId);
 
                 var consent = new Consent
                 {
@@ -168,15 +162,13 @@ public sealed class DefaultConsentService : IConsentService
                 };
 
                 if (client.ConsentLifetime.HasValue)
-                {
                     consent.Expiration = consent.CreationTime.AddSeconds(client.ConsentLifetime.Value);
-                }
 
                 await userConsentStore.StoreUserConsentAsync(consent);
             }
             else
             {
-                logger.LogDebug("Client allows remembering consent, and no scopes provided. Removing consent from consent store for subject: {Subject}", subject.GetSubjectId());
+                logger.LogDebug("Client allows remembering consent, and no scopes provided. Removing consent from consent store for subject: {Subject}", subjectId);
 
                 await userConsentStore.RemoveUserConsentAsync(subjectId, clientId);
             }

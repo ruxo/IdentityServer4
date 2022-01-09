@@ -73,8 +73,7 @@ public sealed class UserInfoResponseGenerator : IUserInfoResponseGenerator
         var context = new ProfileDataRequestContext(validationResult.Subject,
                                                     validationResult.TokenValidationResult.Client,
                                                     IdentityServerConstants.ProfileDataCallers.UserInfoEndpoint,
-                                                    requestedClaimTypes,
-                                                    validatedResources);
+                                                    requestedClaimTypes);
 
         var profileClaims = await profile.GetIssuedClaims(context);
 
@@ -87,9 +86,9 @@ public sealed class UserInfoResponseGenerator : IUserInfoResponseGenerator
         var subClaim = outgoingClaims.SingleOrDefault(x => x.Type == JwtClaimTypes.Subject);
         if (subClaim == null)
         {
-            outgoingClaims.Add(new(JwtClaimTypes.Subject, validationResult.Subject.GetSubjectId()));
+            outgoingClaims.Add(new(JwtClaimTypes.Subject, validationResult.Subject.GetRequiredSubjectId()));
         }
-        else if (subClaim.Value != validationResult.Subject.GetSubjectId())
+        else if (subClaim.Value != validationResult.Subject.GetRequiredSubjectId())
         {
             logger.LogError("Profile service returned incorrect subject value: {Sub}", subClaim);
             throw new InvalidOperationException("Profile service returned incorrect subject value");

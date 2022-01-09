@@ -90,10 +90,10 @@ class DeviceCodeValidator : IDeviceCodeValidator
         var subject = deviceInstance.Subject.Get();
 
         // make sure user is enabled
-        var isActive = await _profile.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.DeviceCodeValidation);
+        var isActive = await _profile.IsActiveAsync(subject, client);
         if (!isActive)
         {
-            _logger.LogError("User has been disabled: {SubjectId}", subject.GetSubjectId());
+            _logger.LogError("User has been disabled: {SubjectId}", subject.GetRequiredSubjectId());
             return ErrorWithCustomResponse.Create(OidcConstants.TokenErrors.InvalidGrant);
         }
 

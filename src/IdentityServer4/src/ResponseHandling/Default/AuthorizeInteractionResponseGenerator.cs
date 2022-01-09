@@ -117,7 +117,7 @@ public class AuthorizeInteractionResponseGenerator : IAuthorizeInteractionRespon
         // user de-activated
         var client = request.ValidatedClient.Get().Client;
 
-        var isActive = subject.IsAuthenticated() && await Profile.IsActiveAsync(subject, client, IdentityServerConstants.ProfileIsActiveCallers.AuthorizeEndpoint);
+        var isActive = subject.IsAuthenticated() && await Profile.IsActiveAsync(subject, client);
 
         if (!subject.IsAuthenticated() || !isActive)
         {

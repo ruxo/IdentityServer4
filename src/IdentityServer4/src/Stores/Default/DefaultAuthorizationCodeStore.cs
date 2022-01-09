@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
 using IdentityServer4.Stores.Serialization;
@@ -37,7 +36,7 @@ public class DefaultAuthorizationCodeStore : DefaultGrantStore<AuthorizationCode
     /// <param name="code">The code.</param>
     /// <returns></returns>
     public Task<string> StoreAuthorizationCodeAsync(AuthorizationCode code) =>
-        CreateItemAsync(code, code.ClientId, code.Subject.GetSubjectId(), code.SessionId, code.Description, code.CreationTime, code.Lifetime);
+        CreateItemAsync(code, code.ClientId, code.SubjectId, code.SessionId, code.Description, code.CreationTime, code.Lifetime);
 
     /// <summary>
     /// Gets the authorization code asynchronous.

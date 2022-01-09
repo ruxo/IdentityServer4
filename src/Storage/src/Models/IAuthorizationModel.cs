@@ -1,5 +1,4 @@
-﻿using System.Security.Claims;
-
+﻿
 namespace IdentityServer4.Models;
 
 /// <summary>
@@ -15,10 +14,6 @@ public interface IAuthorizationModel
     /// Description of this model
     /// </summary>
     Option<string> Description { get; }
-    /// <summary>
-    /// Gets the subject, which is available only when it is authorized.
-    /// </summary>
-    ClaimsPrincipal Subject { get; }
     /// <summary>
     /// Requested scopes
     /// </summary>

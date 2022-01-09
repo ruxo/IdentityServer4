@@ -16,7 +16,9 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Models;
 using IdentityServer4.Validation.Default;
+using JsonWebKey = Microsoft.IdentityModel.Tokens.JsonWebKey;
 
 namespace IdentityServer4.ResponseHandling
 {
@@ -288,7 +290,7 @@ namespace IdentityServer4.ResponseHandling
             // response types
             if (Options.Discovery.ShowResponseTypes)
             {
-                entries.Add(OidcConstants.Discovery.ResponseTypesSupported, Constants.SupportedResponseTypes.ToArray());
+                entries.Add(OidcConstants.Discovery.ResponseTypesSupported, ResponseType.Supported);
             }
 
             // response modes
