@@ -49,7 +49,7 @@ public sealed class BasicAuthenticationSecretParser : ISecretParser
     /// <returns>
     /// A parsed secret
     /// </returns>
-    public async Task<Option<ParsedSecret>> ParseAsync(HttpContext context)
+    public async Task<Option<Credentials>> GetCredentials(HttpContext context)
     {
         logger.LogDebug("Start parsing Basic Authentication secret");
 
@@ -102,14 +102,14 @@ public sealed class BasicAuthenticationSecretParser : ISecretParser
                     return None;
                 }
 
-                return new ParsedSecret(IdentityServerConstants.ParsedSecretTypes.SharedSecret, Decode(clientId), Decode(secret));
+                return new Credentials.Shared(Decode(clientId), Decode(secret));
             }
             else
             {
                 // client secret is optional
                 logger.LogDebug("client id without secret found");
 
-                return new ParsedSecret(IdentityServerConstants.ParsedSecretTypes.NoSecret, Decode(clientId), None);
+                return new Credentials.None(Decode(clientId));
             }
         }
 

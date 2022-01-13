@@ -82,7 +82,7 @@ namespace IdentityServer4.Endpoints
             _logger.LogDebug("Start revocation request.");
 
             // validate client
-            var clientValidationResult = await _clientValidator.ValidateAsync(context);
+            var clientValidationResult = await _clientValidator.GetVerifiedClient(context);
 
             if (clientValidationResult.IsError)
             {

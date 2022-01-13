@@ -87,20 +87,18 @@ class TokenRequestValidator : ITokenRequestValidator
     /// Validates the request.
     /// </summary>
     /// <param name="parameters">The parameters.</param>
-    /// <param name="clientValidationResult">The client validation result.</param>
+    /// <param name="verifiedClient">The client validation result.</param>
     /// <returns></returns>
     /// <exception cref="System.ArgumentNullException">
     /// parameters
     /// or
     /// client
     /// </exception>
-    public async Task<ValidationResult> ValidateRequestAsync(Dictionary<string,string> parameters, ClientSecretValidationResult clientValidationResult)
+    public async Task<ValidationResult> ValidateRequestAsync(ApiParameters parameters, VerifiedClient verifiedClient)
     {
         logger.LogDebug("Start token request validation");
 
-        if (clientValidationResult == null) throw new ArgumentNullException(nameof(clientValidationResult));
-
-        var client = clientValidationResult.Client;
+        var (client, clientSecret, confirmation) = verifiedClient;
 
         // check client protocol type
         if (client.ProtocolType != IdentityServerConstants.ProtocolTypes.OpenIdConnect) {
@@ -115,7 +113,8 @@ class TokenRequestValidator : ITokenRequestValidator
         }
 
         // check grant type
-        var gt = parameters.Get(OidcConstants.TokenRequest.GrantType);
+        var gt = parameters.TryGetSingle(OidcConstants.TokenRequest.GrantType)
+                           .Map(AuthorizeRequestValidator.ValidateLength(OidcConstants.TokenRequest.GrantType, options.InputLengthRestrictions.GrantType));
         if (gt.IsNone)
         {
             logger.LogError("Grant type is missing");
@@ -123,16 +122,10 @@ class TokenRequestValidator : ITokenRequestValidator
         }
         var grantType = gt.Get();
 
-        if (grantType.Length > options.InputLengthRestrictions.GrantType)
-        {
-            logger.LogError("Grant type is too long");
-            return Invalid(OidcConstants.TokenErrors.UnsupportedGrantType);
-        }
-
         var validatedRequest = new ValidatedTokenRequest{
             Raw     = parameters ?? throw new ArgumentNullException(nameof(parameters)),
             Options = options,
-            ValidatedClient =  ValidatedClient.Create(clientValidationResult.Client, clientValidationResult.Secret, clientValidationResult.Confirmation),
+            ValidatedClient =  ValidatedClient.Create(client, clientSecret, confirmation),
             GrantType = grantType
         };
 

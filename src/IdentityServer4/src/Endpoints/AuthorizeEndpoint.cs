@@ -6,9 +6,10 @@ using System.Net;
 using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Endpoints.Results;
 using IdentityServer4.Extensions;
+using IdentityServer4.Models;
 using IdentityServer4.Services;
 using IdentityServer4.Stores;
-using IdentityServer4.Validation;
+using IdentityServer4.Validation.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -18,9 +19,31 @@ namespace IdentityServer4.Endpoints;
 
 class AuthorizeEndpoint : AuthorizeEndpointBase
 {
-    public AuthorizeEndpoint(ILogger logger, IdentityServerOptions options, IAuthorizationCodeStore authorizationCodeStore, IClientStore clientStore, IConsentService consentService, IEventService events, IKeyMaterialService keyMaterialService, IProfileService profileService, IRedirectUriValidator uriValidator, IResourceValidator resourceValidator, IScopeParser scopeParser, ISystemClock clock, IUserSession userSession, IAuthorizationParametersMessageStore? authorizationParametersMessageStore) : base(logger, options, authorizationCodeStore, clientStore, consentService, events, keyMaterialService, profileService, uriValidator, resourceValidator, scopeParser, clock, userSession, authorizationParametersMessageStore) { }
+    readonly IUserSession userSession;
 
-    public override async Task<Unit> HandleRequest(HttpContext context)
+    public AuthorizeEndpoint(ILogger logger, IdentityServerOptions options, IAuthorizationCodeStore authorizationCodeStore, IAuthContextParser contextParser,
+                             IClaimsService claimsService, IConsentService consentService, IEventService events, IKeyMaterialService keyMaterialService,
+                             IMessageStore<ErrorMessage> errorMessageStore, IProfileService profileService, ISystemClock clock, ITokenService tokenService,
+                             ITokenCreationService tokenCreationService, IUserSession userSession, IAuthorizationParametersMessageStore? authorizationParametersMessageStore) :
+        base(logger,
+             options,
+             authorizationCodeStore,
+             contextParser,
+             claimsService,
+             consentService,
+             events,
+             keyMaterialService,
+             errorMessageStore,
+             profileService,
+             clock,
+             tokenService,
+             tokenCreationService,
+             userSession,
+             authorizationParametersMessageStore) {
+        this.userSession = userSession;
+    }
+
+    public override async Task<Either<ErrorInfo, Unit>> HandleRequest(HttpContext context)
     {
         Logger.LogDebug("Start authorize request");
 
@@ -38,8 +61,8 @@ class AuthorizeEndpoint : AuthorizeEndpointBase
         else
             return context.ReturnStatusCode(HttpStatusCode.MethodNotAllowed);
 
-        var user = await UserSession.GetCurrentSession();
-        var renderer = await ProcessAuthorizeRequestAsync(values, user, None);
+        var session = await userSession.GetCurrentSession();
+        var renderer = await ProcessAuthorizeRequestAsync(values, session, None);
         return await renderer(context);
     }
 }

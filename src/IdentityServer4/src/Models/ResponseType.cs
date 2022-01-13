@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Linq;
 using IdentityModel;
+using IdentityServer4.Extensions;
 
 namespace IdentityServer4.Models;
 
 /// <summary>
 /// Represent OIDC response_type. See https://openid.net/specs/openid-connect-core-1_0.html#Authentication
 /// </summary>
-/// <param name="Types"></param>
 public readonly record struct ResponseType(bool Code, bool Token, bool IdToken)
 {
     /// <summary>
@@ -28,6 +28,13 @@ public readonly record struct ResponseType(bool Code, bool Token, bool IdToken)
         var hasIdToken = t.Contains(OidcConstants.ResponseTypes.IdToken);
         return new(hasCode, hasToken, hasIdToken);
     }
+
+    /// <summary>
+    /// Create a <see cref="ResponseType"/> instance from a response type string.
+    /// </summary>
+    /// <param name="responseType"></param>
+    /// <returns></returns>
+    public static ResponseType Create(string responseType) => Create(responseType.FromSpaceSeparatedString());
 
     /// <summary>
     /// Has code
@@ -72,4 +79,17 @@ public readonly record struct ResponseType(bool Code, bool Token, bool IdToken)
         : !Code && !IdToken ? Constants.ScopeRequirement.ResourceOnly
         : !Code && !Token   ? Constants.ScopeRequirement.IdentityOnly
                               : Constants.ScopeRequirement.Identity;
+
+    /// <summary>
+    /// String representation of ResponseType
+    /// </summary>
+    /// <returns></returns>
+    public override string ToString() => Serialize().Join(' ');
+
+    // generated from GitHub Copilot!
+    IEnumerable<string> Serialize() {
+        if (Code) yield return OidcConstants.ResponseTypes.Code;
+        if (Token) yield return OidcConstants.ResponseTypes.Token;
+        if (IdToken) yield return OidcConstants.ResponseTypes.IdToken;
+    }
 }

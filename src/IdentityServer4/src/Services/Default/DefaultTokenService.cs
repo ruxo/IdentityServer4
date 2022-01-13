@@ -15,6 +15,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Claims;
 using IdentityServer4.Configuration.DependencyInjection.Options;
+using IdentityServer4.Models.Contexts;
 
 // ReSharper disable once CheckNamespace
 namespace IdentityServer4.Services;
@@ -64,17 +65,11 @@ public sealed class DefaultTokenService : ITokenService
     /// </summary>
     readonly IdentityServerOptions options;
 
+    readonly ITokenCreationService tokenCreationService;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DefaultTokenService" /> class.
     /// </summary>
-    /// <param name="claimsProvider">The claims provider.</param>
-    /// <param name="referenceTokenStore">The reference token store.</param>
-    /// <param name="creationService">The signing service.</param>
-    /// <param name="contextAccessor">The HTTP context accessor.</param>
-    /// <param name="clock">The clock.</param>
-    /// <param name="keyMaterialService"></param>
-    /// <param name="options">The IdentityServer options</param>
-    /// <param name="logger">The logger.</param>
     public DefaultTokenService(
         IClaimsService claimsProvider,
         IReferenceTokenStore referenceTokenStore,
@@ -83,6 +78,7 @@ public sealed class DefaultTokenService : ITokenService
         ISystemClock clock,
         IKeyMaterialService keyMaterialService,
         IdentityServerOptions options,
+        ITokenCreationService tokenCreationService,
         ILogger<DefaultTokenService> logger)
     {
         this.contextAccessor = contextAccessor;
@@ -92,7 +88,41 @@ public sealed class DefaultTokenService : ITokenService
         this.clock = clock;
         this.keyMaterialService = keyMaterialService;
         this.options = options;
+        this.tokenCreationService = tokenCreationService;
         this.logger = logger;
+    }
+
+    /// <inheritdoc />
+    public async Task<string> CreateIdentityToken(UserSession session, AuthContext data, Option<AccessToken> authToken, Option<string> authorizationCode, string issuerUri) {
+        // TODO: Dom, add a test for this. validate the at and c hashes are correct for the id_token when the client's alg doesn't match the server default.
+        var allowedSignInAlgorithms = data.Client.AllowedIdentityTokenSigningAlgorithms;
+        var algorithm = await keyMaterialService.GetSigningAlgorithm(allowedSignInAlgorithms);
+
+        string createHash(string s) => CryptoHelper.CreateHashClaimValue(s, algorithm);
+        Func<string, Claim> createHashClaim(string claimType) => s => new(claimType, createHash(s));
+
+        var tokenHash = authToken.Map(i => i.Token).Map(createHashClaim(JwtClaimTypes.AccessTokenHash));
+        var authCodeToken = authorizationCode.Map(createHashClaim(JwtClaimTypes.AuthorizationCodeHash));
+        var stateHash = data.State.Map(createHashClaim(JwtClaimTypes.StateHash));
+        var sessionId = session.SessionId.Map(s => new Claim(JwtClaimTypes.SessionId, s));
+
+        var identityClaims = await claimsProvider.GetIdentityTokenClaimsAsync(session, data.Client, data.Resources, includeAllIdentityClaims: !data.ResponseType.AccessTokenNeeded);
+        var claims = data.Nonce.Map(n => new Claim(JwtClaimTypes.Nonce, n))
+                         .Append(new Claim(JwtClaimTypes.IssuedAt, clock.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64))
+                         .Concat(tokenHash)
+                         .Concat(authCodeToken)
+                         .Concat(stateHash)
+                         .Concat(sessionId)
+                         .Concat(identityClaims)
+                         .ToArray();
+        return await tokenCreationService.CreateTokenAsync(OidcConstants.TokenTypes.IdentityToken,
+                                                           allowedSignInAlgorithms,
+                                                           issuerUri,
+                                                           data.Client.IdentityTokenLifetime,
+                                                           new[]{ data.Client.ClientId },
+                                                           claims,
+                                                           None);
+
     }
 
     /// <summary>
@@ -170,7 +200,7 @@ public sealed class DefaultTokenService : ITokenService
         return token;
     }
 
-    public async Task<Token> CreateIdentityTokenAsync(Client client, Option<string> nounce)
+    public async Task<Token> CreateIdentityTokenAsync(Client client, Option<string> nonce)
     {
         logger.LogTrace("Creating identity token");
 
@@ -182,10 +212,7 @@ public sealed class DefaultTokenService : ITokenService
         var claims = new List<Claim>();
 
         // if nonce was sent, must be mirrored in id token
-        if (request.Nonce.IsPresent())
-        {
-            claims.Add(new(JwtClaimTypes.Nonce, request.Nonce));
-        }
+        nonce.Do(n => claims.Add(new(JwtClaimTypes.Nonce, n)));
 
         // add iat claim
         claims.Add(new(JwtClaimTypes.IssuedAt, clock.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64));
@@ -315,6 +342,7 @@ public sealed class DefaultTokenService : ITokenService
                 return await referenceTokenStore.StoreReferenceTokenAsync(token);
         }
         else if (token.Type == OidcConstants.TokenTypes.IdentityToken)
+            // CHECK AuthorizeEndPointBase's GetJwt!
             return await creationService.CreateTokenAsync(token);
         else
             throw new InvalidOperationException("Invalid token type.");

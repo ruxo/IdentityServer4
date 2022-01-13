@@ -2,22 +2,19 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using System.Threading.Tasks;
 using IdentityServer4.Models;
-using LanguageExt;
 
-namespace IdentityServer4.Stores
+namespace IdentityServer4.Stores;
+
+/// <summary>
+/// Retrieval of client configuration
+/// </summary>
+public interface IClientStore
 {
     /// <summary>
-    /// Retrieval of client configuration
+    /// Finds a client by id
     /// </summary>
-    public interface IClientStore
-    {
-        /// <summary>
-        /// Finds a client by id
-        /// </summary>
-        /// <param name="clientId">The client id</param>
-        /// <returns>The client</returns>
-        Task<Option<Client>> FindClientByIdAsync(string clientId);
-    }
+    /// <param name="clientId">The client id</param>
+    /// <returns>The client</returns>
+    Task<Option<Client>> FindClientByIdAsync(string clientId);
 }

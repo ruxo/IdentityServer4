@@ -16,7 +16,7 @@ public interface IDeviceAuthorizationRequestValidator
     ///  Validates authorize request parameters.
     /// </summary>
     /// <param name="parameters"></param>
-    /// <param name="clientValidationResult"></param>
+    /// <param name="verifiedClientValidationResult"></param>
     /// <returns></returns>
-    Task<Either<DeviceAuthorizationRequestValidationError, DeviceAuthorizationRequestValidationResult>> ValidateAsync(Dictionary<string,string> parameters, ClientSecretValidationResult clientValidationResult);
+    Task<Either<DeviceAuthorizationRequestValidationError, DeviceAuthorizationRequestValidationResult>> ValidateAsync(Dictionary<string,string> parameters, VerifiedClient verifiedClientValidationResult);
 }

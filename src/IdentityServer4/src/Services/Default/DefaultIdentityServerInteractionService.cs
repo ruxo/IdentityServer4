@@ -10,178 +10,178 @@ using System;
 using Microsoft.Extensions.Logging;
 using System.Linq;
 using IdentityServer4.Models.Messages;
+using IdentityServer4.Services.Default;
 using Microsoft.AspNetCore.Authentication;
 
-namespace IdentityServer4.Services
+namespace IdentityServer4.Services;
+
+class DefaultIdentityServerInteractionService : IIdentityServerInteractionService
 {
-    internal class DefaultIdentityServerInteractionService : IIdentityServerInteractionService
+    readonly ISystemClock clock;
+    readonly IHttpContextAccessor context;
+    readonly IMessageStore<LogoutMessage> logoutMessageStore;
+    readonly IMessageStore<ErrorMessage> errorMessageStore;
+    readonly IConsentMessageStore consentMessageStore;
+    readonly IPersistedGrantService grants;
+    readonly IUserSession userSession;
+    readonly ILogger logger;
+    readonly ReturnUrlParser returnUrlParser;
+
+    public DefaultIdentityServerInteractionService(
+        ISystemClock clock,
+        IHttpContextAccessor context,
+        IMessageStore<LogoutMessage> logoutMessageStore,
+        IMessageStore<ErrorMessage> errorMessageStore,
+        IConsentMessageStore consentMessageStore,
+        IPersistedGrantService grants,
+        IUserSession userSession,
+        ReturnUrlParser returnUrlParser,
+        ILogger<DefaultIdentityServerInteractionService> logger)
     {
-        private readonly ISystemClock _clock;
-        private readonly IHttpContextAccessor _context;
-        private readonly IMessageStore<LogoutMessage> _logoutMessageStore;
-        private readonly IMessageStore<ErrorMessage> _errorMessageStore;
-        private readonly IConsentMessageStore _consentMessageStore;
-        private readonly IPersistedGrantService _grants;
-        private readonly IUserSession _userSession;
-        private readonly ILogger _logger;
-        private readonly ReturnUrlParser _returnUrlParser;
+        this.clock = clock;
+        this.context = context;
+        this.logoutMessageStore = logoutMessageStore;
+        this.errorMessageStore = errorMessageStore;
+        this.consentMessageStore = consentMessageStore;
+        this.grants = grants;
+        this.userSession = userSession;
+        this.returnUrlParser = returnUrlParser;
+        this.logger = logger;
+    }
 
-        public DefaultIdentityServerInteractionService(
-            ISystemClock clock,
-            IHttpContextAccessor context,
-            IMessageStore<LogoutMessage> logoutMessageStore,
-            IMessageStore<ErrorMessage> errorMessageStore,
-            IConsentMessageStore consentMessageStore,
-            IPersistedGrantService grants,
-            IUserSession userSession,
-            ReturnUrlParser returnUrlParser,
-            ILogger<DefaultIdentityServerInteractionService> logger)
+    public async Task<AuthorizationRequest> GetAuthorizationContextAsync(string returnUrl)
+    {
+        var result = await returnUrlParser.ParseAsync(returnUrl);
+
+        if (result != null)
         {
-            _clock = clock;
-            _context = context;
-            _logoutMessageStore = logoutMessageStore;
-            _errorMessageStore = errorMessageStore;
-            _consentMessageStore = consentMessageStore;
-            _grants = grants;
-            _userSession = userSession;
-            _returnUrlParser = returnUrlParser;
-            _logger = logger;
+            logger.LogTrace("AuthorizationRequest being returned");
+        }
+        else
+        {
+            logger.LogTrace("No AuthorizationRequest being returned");
         }
 
-        public async Task<AuthorizationRequest> GetAuthorizationContextAsync(string returnUrl)
-        {
-            var result = await _returnUrlParser.ParseAsync(returnUrl);
+        return result;
+    }
 
-            if (result != null)
+    public async Task<LogoutRequest> GetLogoutContextAsync(string logoutId)
+    {
+        var msg = await logoutMessageStore.ReadAsync(logoutId);
+        var iframeUrl = await context.HttpContext.GetIdentityServerSignoutFrameCallbackUrlAsync(msg?.Data);
+        return new LogoutRequest(iframeUrl, msg?.Data);
+    }
+
+    public async Task<Option<string>> CreateLogoutContextAsync()
+    {
+        var user = await userSession.GetUserAsync();
+        var clientIds = Seq(await userSession.GetClientListAsync(TODO));
+        if (!user.IsSome || !clientIds.Any()) return None;
+
+        var sid = await userSession.GetSessionIdAsync();
+        var msg = Message.Create(new LogoutMessage{
+            SubjectId = user.Get().GetSubjectId(),
+            SessionId = sid.Get(),
+            ClientIds = clientIds.ToArray()
+        }, clock.UtcNow.UtcDateTime);
+        return await logoutMessageStore.WriteAsync(msg);
+    }
+
+    public async Task<ErrorMessage> GetErrorContextAsync(string errorId)
+    {
+        if (errorId != null)
+        {
+            var result = await errorMessageStore.ReadAsync(errorId);
+            var data = result?.Data;
+            if (data != null)
             {
-                _logger.LogTrace("AuthorizationRequest being returned");
+                logger.LogTrace("Error context loaded");
             }
             else
             {
-                _logger.LogTrace("No AuthorizationRequest being returned");
+                logger.LogTrace("No error context found");
             }
-
-            return result;
+            return data;
         }
 
-        public async Task<LogoutRequest> GetLogoutContextAsync(string logoutId)
+        logger.LogTrace("No error context found");
+
+        return null;
+    }
+
+    public async Task GrantConsentAsync(AuthorizationRequest request, ConsentResponse consent, string subject = null)
+    {
+        if (subject == null)
         {
-            var msg = await _logoutMessageStore.ReadAsync(logoutId);
-            var iframeUrl = await _context.HttpContext.GetIdentityServerSignoutFrameCallbackUrlAsync(msg?.Data);
-            return new LogoutRequest(iframeUrl, msg?.Data);
+            var user = await userSession.GetUserAsync();
+            subject = user?.GetRequiredSubjectId();
         }
 
-        public async Task<Option<string>> CreateLogoutContextAsync()
+        if (subject == null && consent.Granted)
         {
-            var user = await _userSession.GetUserAsync();
-            var clientIds = Seq(await _userSession.GetClientListAsync());
-            if (!user.IsSome || !clientIds.Any()) return None;
-
-            var sid = await _userSession.GetSessionIdAsync();
-            var msg = Message.Create(new LogoutMessage{
-                SubjectId = user.Get().GetSubjectId(),
-                SessionId = sid.Get(),
-                ClientIds = clientIds.ToArray()
-            }, _clock.UtcNow.UtcDateTime);
-            return await _logoutMessageStore.WriteAsync(msg);
+            throw new ArgumentNullException(nameof(subject), "User is not currently authenticated, and no subject id passed");
         }
 
-        public async Task<ErrorMessage> GetErrorContextAsync(string errorId)
+        var consentRequest = new ConsentRequest(request, subject);
+        await consentMessageStore.WriteAsync(consentRequest.Id, Message.Create(consent, clock.UtcNow.UtcDateTime));
+    }
+
+    public Task DenyAuthorizationAsync(AuthorizationRequest request, AuthorizationError error, string errorDescription = null)
+    {
+        var response = new ConsentResponse
         {
-            if (errorId != null)
-            {
-                var result = await _errorMessageStore.ReadAsync(errorId);
-                var data = result?.Data;
-                if (data != null)
-                {
-                    _logger.LogTrace("Error context loaded");
-                }
-                else
-                {
-                    _logger.LogTrace("No error context found");
-                }
-                return data;
-            }
+            Error = error,
+            ErrorDescription = errorDescription
+        };
+        return GrantConsentAsync(request, response);
+    }
 
-            _logger.LogTrace("No error context found");
+    public bool IsValidReturnUrl(string returnUrl)
+    {
+        var result = returnUrlParser.IsValidReturnUrl(returnUrl);
 
-            return null;
+        if (result)
+        {
+            logger.LogTrace("IsValidReturnUrl true");
+        }
+        else
+        {
+            logger.LogTrace("IsValidReturnUrl false");
         }
 
-        public async Task GrantConsentAsync(AuthorizationRequest request, ConsentResponse consent, string subject = null)
+        return result;
+    }
+
+    public async Task<IEnumerable<Grant>> GetAllUserGrantsAsync()
+    {
+        var user = await userSession.GetUserAsync();
+        if (user != null)
         {
-            if (subject == null)
-            {
-                var user = await _userSession.GetUserAsync();
-                subject = user?.GetRequiredSubjectId();
-            }
-
-            if (subject == null && consent.Granted)
-            {
-                throw new ArgumentNullException(nameof(subject), "User is not currently authenticated, and no subject id passed");
-            }
-
-            var consentRequest = new ConsentRequest(request, subject);
-            await _consentMessageStore.WriteAsync(consentRequest.Id, Message.Create(consent, _clock.UtcNow.UtcDateTime));
+            var subject = user.GetRequiredSubjectId();
+            return await grants.GetAllGrantsAsync(subject);
         }
 
-        public Task DenyAuthorizationAsync(AuthorizationRequest request, AuthorizationError error, string errorDescription = null)
+        return Enumerable.Empty<Grant>();
+    }
+
+    public async Task RevokeUserConsentAsync(string clientId)
+    {
+        var user = await userSession.GetUserAsync();
+        if (user != null)
         {
-            var response = new ConsentResponse
-            {
-                Error = error,
-                ErrorDescription = errorDescription
-            };
-            return GrantConsentAsync(request, response);
+            var subject = user.GetRequiredSubjectId();
+            await grants.RemoveAllGrantsAsync(subject, clientId);
         }
+    }
 
-        public bool IsValidReturnUrl(string returnUrl)
+    public async Task RevokeTokensForCurrentSessionAsync()
+    {
+        var user = await userSession.GetUserAsync();
+        if (user != null)
         {
-            var result = _returnUrlParser.IsValidReturnUrl(returnUrl);
-
-            if (result)
-            {
-                _logger.LogTrace("IsValidReturnUrl true");
-            }
-            else
-            {
-                _logger.LogTrace("IsValidReturnUrl false");
-            }
-
-            return result;
-        }
-
-        public async Task<IEnumerable<Grant>> GetAllUserGrantsAsync()
-        {
-            var user = await _userSession.GetUserAsync();
-            if (user != null)
-            {
-                var subject = user.GetRequiredSubjectId();
-                return await _grants.GetAllGrantsAsync(subject);
-            }
-
-            return Enumerable.Empty<Grant>();
-        }
-
-        public async Task RevokeUserConsentAsync(string clientId)
-        {
-            var user = await _userSession.GetUserAsync();
-            if (user != null)
-            {
-                var subject = user.GetRequiredSubjectId();
-                await _grants.RemoveAllGrantsAsync(subject, clientId);
-            }
-        }
-
-        public async Task RevokeTokensForCurrentSessionAsync()
-        {
-            var user = await _userSession.GetUserAsync();
-            if (user != null)
-            {
-                var subject = user.GetRequiredSubjectId();
-                var sessionId = await _userSession.GetSessionIdAsync();
-                await _grants.RemoveAllGrantsAsync(subject, sessionId: sessionId);
-            }
+            var subject = user.GetRequiredSubjectId();
+            var sessionId = await userSession.GetSessionIdAsync();
+            await grants.RemoveAllGrantsAsync(subject, sessionId: sessionId);
         }
     }
 }

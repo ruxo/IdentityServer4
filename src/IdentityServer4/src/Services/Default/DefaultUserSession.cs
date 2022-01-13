@@ -223,52 +223,41 @@ public sealed class DefaultUserSession : IUserSession
     /// <summary>
     /// Adds a client to the list of clients the user has signed into during their session.
     /// </summary>
-    /// <param name="clientId">The client identifier.</param>
     /// <returns></returns>
     /// <exception cref="ArgumentNullException">clientId</exception>
-    public async Task AddClientIdAsync(string clientId)
+    public async Task AddClientIdAsync(UserSession session, string clientId)
     {
-        if (clientId == null) throw new ArgumentNullException(nameof(clientId));
-
-        var (_, properties) = await GetCurrentSession();
-
+        var (_, properties) = session;
         var clientIds = properties.GetClientList();
         if (!clientIds.Contains(clientId)) {
             properties.AddClientId(clientId);
-            await UpdateSessionCookie();
+            await UpdateSessionCookie(session);
         }
     }
 
     /// <summary>
     /// Gets the list of clients the user has signed into during their session.
     /// </summary>
+    /// <param name="session"></param>
     /// <returns></returns>
-    public async Task<IEnumerable<string>> GetClientListAsync()
+    public async Task<IEnumerable<string>> GetClientListAsync(UserSession session)
     {
-        async Task<Option<IEnumerable<string>>> getClientList(AuthenticationProperties p) {
-            try {
-                return Some(p.GetClientList());
-            }
-            catch (Exception ex) {
-                logger.LogError(ex, "Error decoding client list");
-                // clear so we don't keep failing
-                p.RemoveClientList();
-                await UpdateSessionCookie();
-                return None;
-            }
+        try {
+            return session.Properties.GetClientList();
         }
-
-        var (_, properties) = await GetCurrentSession();
-
-        var clientList = await getClientList(properties);
-
-        return clientList.IfNone(Enumerable.Empty<string>);
+        catch (Exception ex) {
+            logger.LogError(ex, "Error decoding client list");
+            // clear so we don't keep failing
+            session.Properties.RemoveClientList();
+            await UpdateSessionCookie(session);
+            return Enumerable.Empty<string>();
+        }
     }
 
     // client list helpers
-    async Task UpdateSessionCookie()
-    {
-        var (principal, properties) = await GetCurrentSession();
+    async Task UpdateSessionCookie(UserSession session) {
+        currentSession = session;
+        var (principal, properties) = session;
 
         if (!principal.IsAuthenticated()) throw new InvalidOperationException("User is not currently authenticated");
 

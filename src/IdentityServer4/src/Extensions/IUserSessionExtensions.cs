@@ -18,7 +18,7 @@ public static class IUserSessionExtensions
     /// </summary>
     /// <returns></returns>
     public static async Task<Option<LogoutNotificationContext>> GetLogoutNotificationContext(this IUserSession session) {
-        var clientIds = (await session.GetClientListAsync()).ToArray();
+        var clientIds = (await session.GetClientListAsync(TODO)).ToArray();
 
         if (clientIds.Any())
         {

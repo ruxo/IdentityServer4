@@ -2,11 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Configuration;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
 using System.Linq;
 using IdentityModel;
 using IdentityServer4.Configuration.DependencyInjection.Options;
@@ -49,7 +47,7 @@ public class PostBodySecretParser : ISecretParser
     /// <returns>
     /// A parsed secret
     /// </returns>
-    public async Task<Option<ParsedSecret>> ParseAsync(HttpContext context)
+    public async Task<Option<Credentials>> GetCredentials(HttpContext context)
     {
         logger.LogDebug("Start parsing for secret in post body");
 
@@ -77,20 +75,13 @@ public class PostBodySecretParser : ISecretParser
                     return None;
                 }
 
-                return new ParsedSecret{
-                    Id         = id,
-                    Credential = secret,
-                    Type       = IdentityServerConstants.ParsedSecretTypes.SharedSecret
-                };
+                return new Credentials.Shared(id, secret);
             }
             else {
                 // client secret is optional
                 logger.LogDebug("client id without secret found");
 
-                return new ParsedSecret{
-                    Id   = id,
-                    Type = IdentityServerConstants.ParsedSecretTypes.NoSecret
-                };
+                return new Credentials.None(id);
             }
         }
 

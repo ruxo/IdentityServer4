@@ -4,7 +4,6 @@
 
 using System.Linq;
 using IdentityModel;
-using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using IdentityServer4.Services;
 using IdentityServer4.Validation.Models;

@@ -5,7 +5,6 @@
 using IdentityServer4.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using System;
 using System.Linq;
 
 // ReSharper disable once CheckNamespace
@@ -35,20 +34,14 @@ public class SecretParser : ISecretsListParser
     /// </summary>
     /// <param name="context">The HTTP context.</param>
     /// <returns></returns>
-    public async Task<Option<ParsedSecret>> ParseAsync(HttpContext context)
+    public async Task<Option<Credentials>> GetCredentials(HttpContext context)
     {
-        bool notNoSecret(ISecretParser parser, ParsedSecret parsedSecret) {
-            logger.LogDebug("Parser found secret: {Type}", parser.GetType().Name);
-            return parsedSecret.Type != IdentityServerConstants.ParsedSecretTypes.NoSecret;
-        }
-
         // see if a registered parser finds a secret on the request
-        var bestSecret = await parsers.ChooseAsync(parser => parser.ParseAsync(context).Map(secret => (parser, secret)))
-                                      .TryFirst(i => notNoSecret(i.parser, i.secret))
-                                      .Map(i => i.secret);
+        var bestSecret = await parsers.ChooseAsync(parser => parser.GetCredentials(context))
+                                      .TryFirst(s => s is not Credentials.None);
 
         if (bestSecret.IsSome)
-            logger.LogDebug("Secret id found: {Id}", bestSecret.Get(s => s.Id));
+            logger.LogDebug("Secret id found: {Id}", bestSecret.Get(s => s.ClientId));
         else
             logger.LogDebug("Parser found no secret");
         return bestSecret;
@@ -58,8 +51,5 @@ public class SecretParser : ISecretsListParser
     /// Gets all available authentication methods.
     /// </summary>
     /// <returns></returns>
-    public IEnumerable<string> GetAvailableAuthenticationMethods()
-    {
-        return parsers.Select(p => p.AuthenticationMethod).Where(p => !String.IsNullOrWhiteSpace(p));
-    }
+    public IEnumerable<string> GetAvailableAuthenticationMethods() => parsers.Select(p => p.AuthenticationMethod).Where(p => !string.IsNullOrWhiteSpace(p));
 }

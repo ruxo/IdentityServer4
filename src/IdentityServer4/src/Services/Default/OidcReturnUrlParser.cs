@@ -3,78 +3,59 @@
 
 
 using System;
-using IdentityServer4.Models;
 using IdentityServer4.Extensions;
-using IdentityServer4.Validation;
+using IdentityServer4.Models.Contexts;
 using Microsoft.Extensions.Logging;
 using IdentityServer4.Stores;
+using IdentityServer4.Validation.Models;
 
 // ReSharper disable once CheckNamespace
 namespace IdentityServer4.Services;
 
 class OidcReturnUrlParser : IReturnUrlParser
 {
-    readonly IAuthorizeRequestValidator _validator;
-    readonly IUserSession _userSession;
-    readonly ILogger _logger;
-    readonly IAuthorizationParametersMessageStore? _authorizationParametersMessageStore;
+    readonly IAuthContextParser authParser;
+    readonly ILogger logger;
+    readonly IAuthorizationParametersMessageStore? authorizationParametersMessageStore;
 
     public OidcReturnUrlParser(
-        IAuthorizeRequestValidator           validator,
-        IUserSession                         userSession,
-        ILogger<OidcReturnUrlParser>         logger,
-        IAuthorizationParametersMessageStore? authorizationParametersMessageStore = null)
-    {
-        _validator                           = validator;
-        _userSession                         = userSession;
-        _logger                              = logger;
-        _authorizationParametersMessageStore = authorizationParametersMessageStore;
+        IAuthContextParser authParser,
+        ILogger<OidcReturnUrlParser> logger,
+        IAuthorizationParametersMessageStore? authorizationParametersMessageStore = null) {
+        this.authParser = authParser;
+        this.logger = logger;
+        this.authorizationParametersMessageStore = authorizationParametersMessageStore;
     }
 
-    public async Task<Option<AuthorizationRequest>> ParseAsync(string returnUrl)
+    public async Task<Either<Exception, AuthContext>> ParseAsync(string returnUrl)
     {
         if (IsValidReturnUrl(returnUrl))
         {
-            var parameters = returnUrl.ReadQueryStringAsNameValueCollection();
-            if (_authorizationParametersMessageStore != null)
+            var parameters = returnUrl.ReadQueryStringAsApiParameters();
+            if (authorizationParametersMessageStore != null)
             {
                 var messageStoreId = parameters[Constants.AuthorizationParamsStore.MessageStoreIdParameterName];
-                var entry = await _authorizationParametersMessageStore.ReadAsync(messageStoreId!);
+                var entry = await authorizationParametersMessageStore.ReadAsync(messageStoreId!);
                 parameters = entry.Data.ToApiParameters();
             }
 
-            var user = await _userSession.GetUserAsync();
-            var result = await _validator.ValidateAsync(parameters, user.Get());
-            if (!result.IsError)
-            {
-                _logger.LogTrace("AuthorizationRequest being returned");
-                return new AuthorizationRequest(result.ValidatedRequest);
+            try {
+                return await authParser.CreateContext(parameters);
+            }
+            catch (Exception e) {
+                return e;
             }
         }
 
-        _logger.LogTrace("No AuthorizationRequest being returned");
-        return None;
+        logger.LogTrace("Return URL's parameters is not valid");
+        return new BadRequestException("Return URL's parameters is not valid");
     }
 
     public bool IsValidReturnUrl(string returnUrl)
     {
-        if (returnUrl.IsLocalUrl())
-        {
-            var index = returnUrl.IndexOf('?');
-            if (index >= 0)
-            {
-                returnUrl = returnUrl.Substring(0, index);
-            }
-
-            if (returnUrl.EndsWith(Constants.ProtocolRoutePaths.Authorize,         StringComparison.Ordinal) ||
-                returnUrl.EndsWith(Constants.ProtocolRoutePaths.AuthorizeCallback, StringComparison.Ordinal))
-            {
-                _logger.LogTrace("returnUrl is valid");
-                return true;
-            }
-        }
-
-        _logger.LogTrace("returnUrl is not valid");
-        return false;
+        var index = returnUrl.IndexOf('?');
+        var path = index >= 0 ? returnUrl[..index] : returnUrl;
+        return returnUrl.IsLocalUrl() && (path.EndsWith(Constants.ProtocolRoutePaths.Authorize, StringComparison.Ordinal) ||
+                                          path.EndsWith(Constants.ProtocolRoutePaths.AuthorizeCallback, StringComparison.Ordinal));
     }
 }

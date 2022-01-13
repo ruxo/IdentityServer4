@@ -65,7 +65,7 @@ namespace IdentityServer4.Endpoints
         {
             _logger.LogDebug("Start device authorize request");
 
-            var cr = await _clientValidator.ValidateAsync(context);
+            var cr = await _clientValidator.GetVerifiedClient(context);
             if (cr.IsLeft) return Error(OidcConstants.TokenErrors.InvalidClient);
             var clientResult = cr.GetRight();
 

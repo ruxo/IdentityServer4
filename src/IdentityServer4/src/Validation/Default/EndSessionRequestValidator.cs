@@ -3,11 +3,9 @@
 
 
 using System;
-using System.Collections.Specialized;
 using System.Linq;
 using System.Security.Claims;
 using IdentityModel;
-using IdentityServer4.Configuration;
 using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Extensions;
 using IdentityServer4.Logging.Models;
@@ -124,7 +122,7 @@ public sealed class EndSessionRequestValidator : IEndSessionRequestValidator
 
                 validatedRequest.Subject   = subject;
                 validatedRequest.SessionId = await userSession.GetSessionIdAsync();
-                validatedRequest.ClientIds = await userSession.GetClientListAsync();
+                validatedRequest.ClientIds = await userSession.GetClientListAsync(subClaim);
             }
 
             var redirectUri = parameters.Get(OidcConstants.EndSessionRequest.PostLogoutRedirectUri);
@@ -154,7 +152,7 @@ public sealed class EndSessionRequestValidator : IEndSessionRequestValidator
             // no id_token to authenticate the client, but we do have a user and a user session
             validatedRequest.Subject   = subject;
             validatedRequest.SessionId = await userSession.GetSessionIdAsync();
-            validatedRequest.ClientIds = await userSession.GetClientListAsync();
+            validatedRequest.ClientIds = await userSession.GetClientListAsync(TODO);
         }
 
         LogSuccess(validatedRequest);

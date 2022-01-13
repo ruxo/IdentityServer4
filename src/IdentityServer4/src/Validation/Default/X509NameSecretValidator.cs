@@ -1,77 +1,42 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
 using Microsoft.Extensions.Logging;
 using static IdentityServer4.IdentityServerConstants;
+#pragma warning disable CS1998
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation.Default;
+
+/// <summary>
+/// Validator for an X.509 certificate based client secret using the common name
+/// </summary>
+public class X509NameSecretValidator : ISecretValidator
 {
+    readonly ILogger<X509NameSecretValidator> logger;
+
     /// <summary>
-    /// Validator for an X.509 certificate based client secret using the common name
+    /// ctor
     /// </summary>
-    public class X509NameSecretValidator : ISecretValidator
+    /// <param name="logger"></param>
+    public X509NameSecretValidator(ILogger<X509NameSecretValidator> logger)
     {
-        private readonly ILogger<X509NameSecretValidator> _logger;
+        this.logger = logger;
+    }
 
-        /// <summary>
-        /// ctor
-        /// </summary>
-        /// <param name="logger"></param>
-        public X509NameSecretValidator(ILogger<X509NameSecretValidator> logger)
-        {
-            _logger = logger;
-        }
+    /// <inheritdoc/>
+    public async ValueTask<Option<SecretInfo>> ValidateAsync(IEnumerable<Secret> secrets, Credentials credentials)
+    {
+        if (credentials is not Credentials.X509Certificate(_, var certificate))
+            return None;
 
-        /// <inheritdoc/>
-        public Task<SecretValidationResult> ValidateAsync(IEnumerable<Secret> secrets, ParsedSecret parsedSecret)
-        {
-            var fail = Task.FromResult(new SecretValidationResult { Success = false });
+        var name = certificate.Subject;
+        var nameSecrets = secrets.Where(s => s.Type == SecretTypes.X509CertificateName);
 
-            if (parsedSecret.Type != ParsedSecretTypes.X509Certificate)
-            {
-                _logger.LogDebug("X509 name secret validator cannot process {type}", parsedSecret.Type ?? "null");
-                return fail;
-            }
+        if (nameSecrets.Any(nameSecret => name.Equals(nameSecret.Value, StringComparison.Ordinal)))
+            return new SecretInfo(certificate.CreateThumbprintCnf());
 
-            if (!(parsedSecret.Credential is X509Certificate2 cert))
-            {
-                throw new InvalidOperationException("Credential is not a x509 certificate.");
-            }
-
-            var name = cert.Subject;
-            if (name == null)
-            {
-                _logger.LogWarning("No subject/name found in X509 certificate.");
-                return fail;
-            }
-
-            var nameSecrets = secrets.Where(s => s.Type == SecretTypes.X509CertificateName);
-            if (!nameSecrets.Any())
-            {
-                _logger.LogDebug("No x509 name secrets configured for client.");
-                return fail;
-            }
-
-            foreach (var nameSecret in nameSecrets)
-            {
-                if (name.Equals(nameSecret.Value, StringComparison.Ordinal))
-                {
-                    var result = new SecretValidationResult
-                    {
-                        Success = true,
-                        Confirmation = cert.CreateThumbprintCnf()
-                    };
-
-                    return Task.FromResult(result);
-                }
-            }
-
-            _logger.LogDebug("No matching x509 name secret found.");
-            return fail;
-        }
+        logger.LogDebug("No matching x509 name secret found");
+        return None;
     }
 }

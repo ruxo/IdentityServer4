@@ -19,7 +19,7 @@ public interface ISecretParser
     /// <returns>
     /// A parsed secret
     /// </returns>
-    Task<Option<ParsedSecret>> ParseAsync(HttpContext context);
+    Task<Option<Credentials>> GetCredentials(HttpContext context);
 
     /// <summary>
     /// Returns the authentication method name that this parser implements

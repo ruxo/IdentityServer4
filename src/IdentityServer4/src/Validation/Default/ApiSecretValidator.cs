@@ -50,7 +50,7 @@ public class ApiSecretValidator : IApiSecretValidator
     {
         logger.LogTrace("Start API validation");
 
-        var parsedSecret = await parser.ParseAsync(context);
+        var parsedSecret = await parser.GetCredentials(context);
         if (parsedSecret.IsNone)
         {
             await RaiseFailureEventAsync("unknown", "No API id or secret found");
@@ -58,7 +58,7 @@ public class ApiSecretValidator : IApiSecretValidator
             logger.LogError("No API secret found");
             return new ErrorInfo(OidcConstants.TokenErrors.InvalidRequest);
         }
-        var secretId = parsedSecret.Get().Id;
+        var secretId = parsedSecret.Get().ClientId;
 
         // load API resource
         var apis = Seq(await resources.FindApiResourcesByNameAsync(new[] { secretId }));

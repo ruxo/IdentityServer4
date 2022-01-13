@@ -17,15 +17,14 @@ using IdentityServer4.Events.Infrastructure;
 using IdentityServer4.Extensions;
 using IdentityServer4.Hosting;
 using IdentityServer4.Models;
+using IdentityServer4.Models.Contexts;
 using IdentityServer4.Services;
 using IdentityServer4.Stores;
-using IdentityServer4.Validation;
 using IdentityServer4.Validation.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
-using RZ.Foundation.Helpers;
 using ResponseDict = System.Collections.Immutable.ImmutableDictionary<string, string>;
 
 // ReSharper disable TemplateIsNotCompileTimeConstantProblem
@@ -34,10 +33,7 @@ namespace IdentityServer4.Endpoints;
 
 abstract class AuthorizeEndpointBase : IEndpointHandler
 {
-    readonly IClientStore clientStore;
     readonly IConsentService consentService;
-    readonly IResourceValidator resourceValidator;
-    readonly IScopeParser scopeParser;
     readonly ISystemClock clock;
     readonly ITokenService tokenService;
     readonly ITokenCreationService tokenCreationService;
@@ -47,25 +43,23 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
     readonly IKeyMaterialService keyMaterialService;
     readonly IMessageStore<ErrorMessage> errorMessageStore;
     readonly IProfileService profileService;
-    readonly IRedirectUriValidator uriValidator;
     readonly IdentityServerOptions options;
     readonly IAuthorizationCodeStore authorizationCodeStore;
+    readonly IAuthContextParser contextParser;
     readonly IClaimsService claimsService;
+    readonly IUserSession userSession;
 
     protected AuthorizeEndpointBase(
         ILogger logger,
         IdentityServerOptions options,
         IAuthorizationCodeStore authorizationCodeStore,
+        IAuthContextParser contextParser,
         IClaimsService claimsService,
-        IClientStore clientStore,
         IConsentService consentService,
         IEventService events,
         IKeyMaterialService keyMaterialService,
         IMessageStore<ErrorMessage> errorMessageStore,
         IProfileService profileService,
-        IRedirectUriValidator uriValidator,
-        IResourceValidator resourceValidator,
-        IScopeParser scopeParser,
         ISystemClock clock,
         ITokenService tokenService,
         ITokenCreationService tokenCreationService,
@@ -75,27 +69,22 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         this.keyMaterialService = keyMaterialService;
         this.errorMessageStore = errorMessageStore;
         this.profileService = profileService;
-        this.uriValidator = uriValidator;
         this.options = options;
         this.authorizationCodeStore = authorizationCodeStore;
+        this.contextParser = contextParser;
         this.claimsService = claimsService;
         Logger = logger;
-        this.clientStore = clientStore;
         this.consentService = consentService;
-        this.resourceValidator = resourceValidator;
-        this.scopeParser = scopeParser;
         this.clock = clock;
         this.tokenService = tokenService;
         this.tokenCreationService = tokenCreationService;
         this.authorizationParametersMessageStore = authorizationParametersMessageStore;
-        UserSession = userSession;
+        this.userSession = userSession;
     }
 
     protected ILogger Logger { get; }
 
-    protected IUserSession UserSession { get; }
-
-    public abstract Task<Unit> HandleRequest(HttpContext context);
+    public abstract Task<Either<ErrorInfo, Unit>> HandleRequest(HttpContext context);
 
     internal async Task<ApiRenderer> ProcessAuthorizeRequestAsync(ApiParameters parameters, UserSession session, Option<ConsentResponse> consent) {
         if (session.IsAuthenticated)
@@ -105,7 +94,7 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
 
         AuthContext data;
         try {
-            data = await CreateContext(parameters.TryGetSingle);
+            data = await contextParser.CreateContext(parameters);
         }
         catch (BadRequestException e) {
             await LogAndRaiseError(TokenIssuedFailureEvent.Create(e));
@@ -115,7 +104,7 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
 
         try {
             if (session.IsAuthenticated || !consent.Map(c => !c.Granted && c.Error.HasValue).GetOrDefault())
-                return await Render(parameters, data, session, consent);
+                return await Render(data, session, consent);
 
             // special case when anonymous user has issued an error prior to authenticating
             Logger.LogInformation("Error: User consent result: {Error}", consent.GetOrDefault(c => c.Error));
@@ -134,7 +123,7 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
                                   or OidcConstants.AuthorizeErrors.InteractionRequired;
             return isSafeError
                        ? await RenderAuthorizationResponse(session, data, consent, forError: true)
-                       : RedirectToErrorPage(parameters, data.ResponseMode, data.ClientId, data.RedirectUri, new(e.Error, e.ErrorDescription.GetOrDefault()));
+                       : RedirectToErrorPage(data, new(e.Error, e.ErrorDescription.GetOrDefault()));
         }
     }
 
@@ -143,29 +132,28 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         await events.RaiseAsync(errorEvent);
     }
 
-    async Task<ApiRenderer> Render(ImmutableDictionary<string,StringValues> parameters, AuthContext data, UserSession session, Option<ConsentResponse> consent) {
+    async Task<ApiRenderer> Render(AuthContext data, UserSession session, Option<ConsentResponse> consent) {
         // TODO check scope with requirement from the validator!
-        var promptModes = parameters.TryGetSingle(OidcConstants.AuthorizeRequest.Prompt).Get(ValidatePromptMode);
-        var noUiRendering = promptModes.Contains(OidcConstants.PromptModes.None);
+        var noUiRendering = data.PromptModes.Contains(OidcConstants.PromptModes.None);
 
-        var loginFlow = !session.IsAuthenticated || await ShouldLogin(promptModes, session.AuthenticatedUser, data.Client, data.AcrValues, data.MaxAge);
+        var loginFlow = !session.IsAuthenticated || await ShouldLogin(data.PromptModes, session.AuthenticatedUser, data.Client, data.AcrValues, data.MaxAge);
         if (loginFlow)
         {
             if (noUiRendering)
                 // prompt=none means do not show the UI
                 throw AuthError(OidcConstants.AuthorizeErrors.LoginRequired, "Login is required but prompt mode is none!");
-            return RenderLoginPage(parameters.Remove(OidcConstants.AuthorizeRequest.Prompt));
+            return RenderLoginPage((data with { PromptModes = ImmutableHashSet<string>.Empty }).ToApiParameters());
         }
 
         var consentRequired = await consentService.RequiresConsentAsync(session.AuthenticatedUser.SubjectId, data.Client, data.ParsedScopes);
         if (!consentRequired) return await RenderAuthorizationResponse(session, data, consent);
 
-        if (noUiRendering || !promptModes.Contains(OidcConstants.PromptModes.Consent))
+        if (noUiRendering || !data.PromptModes.Contains(OidcConstants.PromptModes.Consent))
             throw AuthError(OidcConstants.AuthorizeErrors.ConsentRequired, "Error: prompt is none or not consent when consent is required");
 
         return consent.IsSome
                    ? await RenderConsentPage(consent.Get(), session, data, data.Resources, data.ParsedScopes)
-                   : RenderNewConsent(parameters);
+                   : RenderNewConsent(data.ToApiParameters());
     }
 
     async Task<bool> ShouldLogin(IReadOnlySet<string> promptModes, AuthenticatedUser user, Client client, IEnumerable<string> acrValues, Option<int> maxAge) =>
@@ -182,127 +170,6 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
     static Option<string> GetIdp(IEnumerable<string> acrValues) =>
         acrValues.TryFirst(s => s.StartsWith(Constants.KnownAcrValues.HomeRealm))
                  .Map(s => s[Constants.KnownAcrValues.HomeRealm.Length..]);
-
-    #region Validations
-
-    async Task<AuthContext> CreateContext(Func<string, Option<string>> tryGetSingle) {
-        var responseType = tryGetSingle(OidcConstants.AuthorizeRequest.ResponseType)
-                          .Map(s => ResponseType.Create(s.FromSpaceSeparatedString()))
-                          .GetOrThrow(() => throw AuthError(OidcConstants.AuthorizeErrors.UnsupportedResponseType, "Missing response_type"));
-        var grantType = responseType.GetGrantType();
-        var responseMode = tryGetSingle(OidcConstants.AuthorizeRequest.ResponseMode)
-                                     .Map(ValidateResponseMode(grantType))
-                                     .IfNone(() => Constants.AllowedResponseModesForGrantType[grantType].First());
-
-        var clientId = tryGetSingle(OidcConstants.AuthorizeRequest.ClientId)
-                                 .Where(cid => !cid.IsMissingOrTooLong(options.InputLengthRestrictions.ClientId))
-                                 .GetOrThrow(() => AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Invalid client_id"));
-        var scopes = tryGetSingle(OidcConstants.AuthorizeRequest.Scope)
-                               .Map(ValidateLength("scope", options.InputLengthRestrictions.Scope))
-                               .Map(s => s.FromSpaceSeparatedString().ToImmutableHashSet())
-                               .GetOrThrow(() => AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Invalid scope"));
-
-        var client = (await clientStore.FindClientByIdAsync(clientId))
-           .GetOrThrow(() => {
-                Logger.LogError("Unknown client {ClientId} or not enabled", clientId);
-                return AuthError(OidcConstants.AuthorizeErrors.UnauthorizedClient, "Unknown client or client not enabled");
-            });
-
-        var acrValues = tryGetSingle(OidcConstants.AuthorizeRequest.AcrValues)
-                                  .Map(ValidateLength("acr_values", options.InputLengthRestrictions.AcrValues))
-                                  .Map(s => s.FromSpaceSeparatedString().Distinct().ToArray())
-                                  .IfNone(Array.Empty<string>());
-        var maxAge = tryGetSingle(OidcConstants.AuthorizeRequest.MaxAge).Map(ValidateMaxAge);
-
-        var state = tryGetSingle(OidcConstants.AuthorizeRequest.State);
-        var pkce = ValidatePkceData(tryGetSingle, client);
-        var redirectUri = await ValidateRedirectUri(tryGetSingle, client);
-        var nonce = tryGetSingle(OidcConstants.AuthorizeRequest.Nonce).Map(ValidateLength("nonce", options.InputLengthRestrictions.Nonce));
-
-        if (nonce.IsNone && grantType is GrantType.Implicit or GrantType.Hybrid && scopes.Contains(IdentityServerConstants.StandardScopes.OpenId))
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Nonce required for implicit and hybrid flow with openid scope");
-
-        var (parsedScopes, invalidScopes) = scopeParser.ParseScopeValues(scopes);
-        if (invalidScopes.Any())
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidScope, $"Invalid scope values: {invalidScopes.Map(i => i.Scope).Join(", ")}");
-        var (resources, invalids) = await resourceValidator.ValidateScopesWithClient(client, parsedScopes);
-        if (invalids.Any())
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidScope, $"Invalid scopes: {invalids.Map(i => i.Scope).Join(", ")}");
-
-        return new(responseType, grantType, responseMode, clientId, scopes, parsedScopes, resources, client, acrValues, redirectUri, maxAge, state, pkce, nonce);
-    }
-
-    Func<string, string> ValidateLength(string name, int validLength) => s => {
-        if (s.Length > validLength)
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, $"{name} too long");
-        return s;
-    };
-
-    Func<string, string> ValidateLength(string name, int minLength, int maxLength) => s => {
-        if (s.Length < minLength)
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, $"{name} too short");
-        if (s.Length > maxLength)
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, $"{name} too long");
-        return s;
-    };
-
-    Option<PkceData> ValidatePkceData(Func<string, Option<string>> tryGetSingle, Client client) {
-        var codeChallenge = tryGetSingle(OidcConstants.AuthorizeRequest.CodeChallenge)
-           .Map(ValidateLength("code_challenge",
-                               options.InputLengthRestrictions.CodeChallengeMinLength,
-                               options.InputLengthRestrictions.CodeChallengeMaxLength));
-        if (codeChallenge.IsNone && client.RequirePkce)
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "code challenge required");
-
-        var codeChallengeMethod = tryGetSingle(OidcConstants.AuthorizeRequest.CodeChallengeMethod)
-           .IfNone(OidcConstants.CodeChallengeMethods.Plain);
-        if (!Constants.SupportedCodeChallengeMethods.Contains(codeChallengeMethod))
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, $"Transform algorithm {codeChallengeMethod} not supported");
-        if (codeChallengeMethod == OidcConstants.CodeChallengeMethods.Plain && !client.AllowPlainTextPkce)
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "code_challenge_method of plain is not allowed");
-        return new PkceData(codeChallenge.Get(), codeChallengeMethod);
-    }
-
-    async Task<string> ValidateRedirectUri(Func<string, Option<string>> tryGetSingle, Client client) {
-        var redirectUri = tryGetSingle(OidcConstants.AuthorizeRequest.RedirectUri)
-                         .Map(ValidateLength("redirect_uri", options.InputLengthRestrictions.RedirectUri))
-                         .GetOrThrow(() => AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "redirect_uri required"));
-        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out _))
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Invalid redirect_uri");
-        if (client.ProtocolType != IdentityServerConstants.ProtocolTypes.OpenIdConnect)
-            throw AuthError(OidcConstants.AuthorizeErrors.UnauthorizedClient, "Invalid protocol");
-        if (!await uriValidator.IsRedirectUriValidAsync(redirectUri, client))
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, $"Invalid redirect_uri {redirectUri}");
-        return redirectUri;
-    }
-
-    Func<string, string> ValidateResponseMode(string grantType) => responseMode => {
-        if (Constants.SupportedResponseModes.Contains(responseMode)) {
-            if (Constants.AllowedResponseModesForGrantType[grantType].Contains(responseMode))
-                return responseMode;
-            Logger.LogError("Invalid response_mode for response_type: {ResponseMode}", responseMode);
-            throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Invalid response_mode for response_type");
-        }
-        Logger.LogError("Unsupported response_mode: {ResponseMode}", responseMode);
-        throw AuthError(OidcConstants.AuthorizeErrors.UnsupportedResponseType, "Invalid response_mode");
-    };
-
-    System.Collections.Generic.HashSet<string> ValidatePromptMode(string prompt) {
-        var prompts = prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
-        if (prompts.All(Constants.SupportedPromptModes.Contains)) {
-            if (prompts.Count > 1 && prompts.Contains(OidcConstants.PromptModes.None)) {
-                Logger.LogError("prompt contains 'none' and other values. 'none' should be used by itself");
-                throw AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, "Invalid prompt");
-            }
-            return prompts;
-        }
-        Logger.LogDebug("Unsupported prompt mode - ignored: " + prompt);
-        return new ();
-    }
-
-    int ValidateMaxAge(string s) => TryConvert.ToInt32(s).Where(i => i >= 0).GetOrThrow(() => AuthError(OidcConstants.AuthorizeErrors.InvalidRequest, $"Invalid max_age: {s}"));
-
-    #endregion
 
     #region Renderer
 
@@ -380,7 +247,7 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
                       .Append(("code", id))
                       .ToImmutableDictionary();
 
-        await UserSession.AddClientIdAsync(data.ClientId);
+        await userSession.AddClientIdAsync(session, data.ClientId);
 
         return await ReturnResponse(forError, data.ResponseMode, data.RedirectUri, response)(context);
     };
@@ -504,31 +371,30 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
         FormPostHtml.Replace("{uri}", HtmlEncoder.Default.Encode(redirectUri))
                     .Replace("{body}", response.ToApiParameters().ToFormPost());
 
-    ApiRenderer RedirectToErrorPage(ImmutableDictionary<string, StringValues> parameters, string responseMode, string clientId, string redirectUri, ErrorInfo error) =>
-        async context => {
-            var response = ResponseDict.Empty
-                                       .Add("error", error.Error)
-                                       .Add("error_description", error.ErrorDescription ?? string.Empty);
-            var errorModel = new ErrorMessage{
-                RequestId = context.TraceIdentifier,
-                Error = error.Error,
-                ErrorDescription = error.ErrorDescription,
-                UiLocales = parameters.TryGetSingle(OidcConstants.AuthorizeRequest.UiLocales).Map(ValidateLength("ui_locales", options.InputLengthRestrictions.UiLocale)),
-                DisplayMode = parameters.TryGetSingle(OidcConstants.AuthorizeRequest.Display).Where(Constants.SupportedDisplayModes.Contains),
-                ClientId = clientId,
+    ApiRenderer RedirectToErrorPage(AuthContext data, ErrorInfo error) => async context => {
+        var response = ResponseDict.Empty
+                                   .Add("error", error.Error)
+                                   .Add("error_description", error.ErrorDescription ?? string.Empty);
+        var errorModel = new ErrorMessage{
+            RequestId = context.TraceIdentifier,
+            Error = error.Error,
+            ErrorDescription = error.ErrorDescription,
+            UiLocales = data.UiLocales,
+            DisplayMode = data.DisplayMode,
+            ClientId = data.ClientId,
 
-                // if we have a valid redirect uri, then include it to the error page
-                RedirectUri = CreateRedirectUri(forError: true, responseMode, redirectUri, response, context).ToString(),
-                ResponseMode = responseMode
-            };
-
-            var message = Message.Create(errorModel, clock.UtcNow.UtcDateTime);
-            var id = await errorMessageStore.WriteAsync(message);
-
-            var url = options.UserInteraction.ErrorUrl.AddQueryString(options.UserInteraction.ErrorIdParameter, id);
-            context.Response.RedirectToAbsoluteUrl(url);
-            return Unit.Default;
+            // if we have a valid redirect uri, then include it to the error page
+            RedirectUri = CreateRedirectUri(forError: true, data.ResponseMode, data.RedirectUri, response, context).ToString(),
+            ResponseMode = data.ResponseMode
         };
+
+        var message = Message.Create(errorModel, clock.UtcNow.UtcDateTime);
+        var id = await errorMessageStore.WriteAsync(message);
+
+        var url = options.UserInteraction.ErrorUrl.AddQueryString(options.UserInteraction.ErrorIdParameter, id);
+        context.Response.RedirectToAbsoluteUrl(url);
+        return Unit.Default;
+    };
 
     #endregion
 
@@ -561,8 +427,4 @@ abstract class AuthorizeEndpointBase : IEndpointHandler
     }
 
     static Exception AuthError(string error, string? description = null) => new BadRequestException(error, description);
-
-    sealed record AuthContext(ResponseType ResponseType, string GrantType, string ResponseMode, string ClientId, ImmutableHashSet<string> Scopes, ParsedScopeValue[] ParsedScopes,
-                              Resource[] Resources, Client Client, string[] AcrValues, string RedirectUri, Option<int> MaxAge, Option<string> State, Option<PkceData> Pkce,
-                              Option<string> Nonce);
 }

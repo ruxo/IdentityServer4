@@ -168,7 +168,7 @@ public static class HttpContextExtensions
             // check if current user is same, since we might have new clients (albeit unlikely)
             if (currentSubId == logoutMessage?.SubjectId)
             {
-                clientIds = clientIds.Union(await userSession.GetClientListAsync());
+                clientIds = clientIds.Union(await userSession.GetClientListAsync(TODO));
                 clientIds = clientIds.Distinct();
             }
 
@@ -177,7 +177,7 @@ public static class HttpContextExtensions
         else if (currentSubId != null)
         {
             // see if current user has any clients they need to signout of
-            var clientIds = await userSession.GetClientListAsync();
+            var clientIds = await userSession.GetClientListAsync(currentSubId);
             if (clientIds.Any())
             {
                 endSessionMsg = new LogoutNotificationContext

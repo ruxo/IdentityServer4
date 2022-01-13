@@ -82,7 +82,7 @@ public abstract class ValidatedRequest
 /// The client claims for the current request.
 /// This value is initially read from the client configuration but can be modified in the request pipeline
 /// </param>
-public sealed record ValidatedClient(Client          Client,          Option<ParsedSecret> Secret, string Confirmation, string ClientId, int AccessTokenLifetime,
+public sealed record ValidatedClient(Client          Client,          Option<Credentials> Secret, string Confirmation, string ClientId, int AccessTokenLifetime,
                                      AccessTokenType AccessTokenType, ClaimCollection      ClientClaims)
 {
     /// <summary>
@@ -92,7 +92,7 @@ public sealed record ValidatedClient(Client          Client,          Option<Par
     /// <param name="secret">The client secret (optional).</param>
     /// <param name="confirmation">The confirmation.</param>
     /// <exception cref="ArgumentNullException">client</exception>
-    public static ValidatedClient Create(Client client, ParsedSecret? secret = null, string confirmation = "") =>
+    public static ValidatedClient Create(Client client, Credentials? secret = null, string confirmation = "") =>
         new(client,
             Optional(secret!),
             confirmation,

@@ -3,7 +3,6 @@
 
 
 using System;
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
 using IdentityModel;
@@ -32,7 +31,7 @@ class DeviceAuthorizationRequestValidator : IDeviceAuthorizationRequestValidator
         this.logger            = logger;
     }
 
-    public async Task<Either<DeviceAuthorizationRequestValidationError, DeviceAuthorizationRequestValidationResult>> ValidateAsync(Dictionary<string,string> parameters, ClientSecretValidationResult clientValidationResult)
+    public async Task<Either<DeviceAuthorizationRequestValidationError, DeviceAuthorizationRequestValidationResult>> ValidateAsync(Dictionary<string,string> parameters, VerifiedClient verifiedClientValidationResult)
     {
         logger.LogDebug("Start device authorization request validation");
 
@@ -42,7 +41,7 @@ class DeviceAuthorizationRequestValidator : IDeviceAuthorizationRequestValidator
             Options = options
         };
 
-        var result = await ValidateClient(request, clientValidationResult).BindT(_ => ValidateScopeAsync(request));
+        var result = await ValidateClient(request, verifiedClientValidationResult).BindT(_ => ValidateScopeAsync(request));
         if (result.IsLeft)
             return result;
 
@@ -70,9 +69,9 @@ class DeviceAuthorizationRequestValidator : IDeviceAuthorizationRequestValidator
     }
 
     Either<DeviceAuthorizationRequestValidationError, DeviceAuthorizationRequestValidationResult> ValidateClient(
-        ValidatedDeviceAuthorizationRequest request, ClientSecretValidationResult clientValidationResult) {
-        var client = clientValidationResult.Client;
-        request.ValidatedClient = ValidatedClient.Create(client, clientValidationResult.Secret);
+        ValidatedDeviceAuthorizationRequest request, VerifiedClient verifiedClientValidationResult) {
+        var client = verifiedClientValidationResult.Client;
+        request.ValidatedClient = ValidatedClient.Create(client, verifiedClientValidationResult.Secret);
 
         if (client.ProtocolType != IdentityServerConstants.ProtocolTypes.OpenIdConnect) {
             LogError("Invalid protocol type for OIDC authorize endpoint", client.ProtocolType, request);

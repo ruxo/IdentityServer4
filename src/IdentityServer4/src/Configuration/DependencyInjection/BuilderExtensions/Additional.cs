@@ -13,6 +13,7 @@ using IdentityServer4;
 using IdentityServer4.Configuration;
 using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Services.Default;
+using IdentityServer4.Validation.Default;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Extensions.DependencyInjection

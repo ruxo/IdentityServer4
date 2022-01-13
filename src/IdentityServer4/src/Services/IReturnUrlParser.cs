@@ -2,7 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
-using IdentityServer4.Models;
+using System;
+using IdentityServer4.Models.Contexts;
 
 namespace IdentityServer4.Services;
 
@@ -16,7 +17,7 @@ public interface IReturnUrlParser
     /// </summary>
     /// <param name="returnUrl">The return URL.</param>
     /// <returns></returns>
-    Task<Option<AuthorizationRequest>> ParseAsync(string returnUrl);
+    Task<Either<Exception, AuthContext>> ParseAsync(string returnUrl);
 
     /// <summary>
     /// Determines whether the return URL is valid.

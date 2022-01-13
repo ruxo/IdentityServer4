@@ -15,7 +15,7 @@ public interface ITokenRequestValidator
     /// Validates the request.
     /// </summary>
     /// <param name="parameters">The parameters.</param>
-    /// <param name="clientValidationResult">The client validation result.</param>
+    /// <param name="verifiedClient">The client validation result.</param>
     /// <returns></returns>
-    Task<Either<ErrorWithCustomResponse,Unit>> ValidateRequestAsync(Dictionary<string,string> parameters, ClientSecretValidationResult clientValidationResult);
+    Task<Either<ErrorWithCustomResponse,Unit>> ValidateRequestAsync(ApiParameters parameters, VerifiedClient verifiedClient);
 }

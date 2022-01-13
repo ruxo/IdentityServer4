@@ -3,15 +3,11 @@
 
 using System;
 using System.Linq;
-using System.Threading.Tasks;
-using IdentityServer4.Configuration;
 using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
-using LanguageExt;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using static LanguageExt.Prelude;
 
 // ReSharper disable once CheckNamespace
 namespace IdentityServer4.Validation;
@@ -45,7 +41,7 @@ public class MutualTlsSecretParser : ISecretParser
     /// </summary>
     /// <param name="context"></param>
     /// <returns></returns>
-    public async Task<Option<ParsedSecret>> ParseAsync(HttpContext context)
+    public async Task<Option<Credentials>> GetCredentials(HttpContext context)
     {
         logger.LogDebug("Start parsing for client id in post body");
 
@@ -73,11 +69,7 @@ public class MutualTlsSecretParser : ISecretParser
                 return None;
             }
 
-            return new ParsedSecret{
-                Id         = id,
-                Credential = clientCertificate,
-                Type       = IdentityServerConstants.ParsedSecretTypes.X509Certificate
-            };
+            return new Credentials.X509Certificate(id, clientCertificate);
         }
 
         logger.LogDebug("No post body found");

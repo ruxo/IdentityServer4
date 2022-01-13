@@ -45,13 +45,13 @@ public interface IUserSession
     /// <summary>
     /// Adds a client to the list of clients the user has signed into during their session.
     /// </summary>
-    /// <param name="clientId">The client identifier.</param>
     /// <returns></returns>
-    Task AddClientIdAsync(string clientId);
+    Task AddClientIdAsync(UserSession session, string clientId);
 
     /// <summary>
     /// Gets the list of clients the user has signed into during their session.
     /// </summary>
+    /// <param name="session"></param>
     /// <returns></returns>
-    Task<IEnumerable<string>> GetClientListAsync();
+    Task<IEnumerable<string>> GetClientListAsync(UserSession session);
 }

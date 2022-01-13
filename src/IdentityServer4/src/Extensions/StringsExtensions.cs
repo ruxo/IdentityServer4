@@ -4,6 +4,7 @@
 
 using Microsoft.AspNetCore.WebUtilities;
 using System;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -166,23 +167,11 @@ static class StringExtensions
     }
 
     [DebuggerStepThrough]
-    public static Dictionary<string,string> ReadQueryStringAsNameValueCollection(this string url)
+    public static ApiParameters ReadQueryStringAsApiParameters(this string url)
     {
-        if (url != null)
-        {
-            var idx = url.IndexOf('?');
-            if (idx >= 0)
-            {
-                url = url.Substring(idx + 1);
-            }
-            var query = QueryHelpers.ParseNullableQuery(url);
-            if (query != null)
-            {
-                return query.ToNameValueDictionary();
-            }
-        }
-
-        return new Dictionary<string,string>();
+        var idx = url.IndexOf('?');
+        var queryString = idx >= 0? url[(idx + 1)..] : string.Empty;
+        return QueryHelpers.ParseNullableQuery(queryString)!.ToImmutableDictionary();
     }
 
     public static string GetOrigin(this string url)

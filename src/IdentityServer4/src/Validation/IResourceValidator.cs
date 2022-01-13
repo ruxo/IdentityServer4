@@ -5,16 +5,15 @@
 using IdentityServer4.Models;
 using IdentityServer4.Validation.Models;
 
-namespace IdentityServer4.Validation
+namespace IdentityServer4.Validation;
+
+/// <summary>
+/// Validates requested resources (scopes and resource indicators)
+/// </summary>
+public interface IResourceValidator
 {
     /// <summary>
-    /// Validates requested resources (scopes and resource indicators)
+    /// Validates the requested resources for the client.
     /// </summary>
-    public interface IResourceValidator
-    {
-        /// <summary>
-        /// Validates the requested resources for the client.
-        /// </summary>
-        Task<(Resource[] RequestedResources, ParsedScopeValidationError[] InvalidScopes)> ValidateScopesWithClient(Client client, IEnumerable<ParsedScopeValue> parsedScopes);
-    }
+    Task<(Resource[] RequestedResources, ParsedScopeValidationError[] InvalidScopes)> ValidateScopesWithClient(Client client, IEnumerable<ParsedScopeValue> parsedScopes);
 }

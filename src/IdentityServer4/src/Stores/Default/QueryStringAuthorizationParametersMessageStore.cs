@@ -18,7 +18,7 @@ class QueryStringAuthorizationParametersMessageStore : IAuthorizationParametersM
 
     public Task<Message<IDictionary<string, string[]>>> ReadAsync(string id)
     {
-        var values = id.ReadQueryStringAsNameValueCollection();
+        var values = id.ReadQueryStringAsApiParameters();
         var msg = Message.Create(values.ToFullDictionary());
         return Task.FromResult(msg);
     }

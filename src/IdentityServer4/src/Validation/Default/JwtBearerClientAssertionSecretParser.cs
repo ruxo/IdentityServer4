@@ -3,18 +3,14 @@
 
 
 using System;
-using System.Threading.Tasks;
 using System.Linq;
 using System.IdentityModel.Tokens.Jwt;
 using IdentityModel;
-using IdentityServer4.Configuration;
 using IdentityServer4.Configuration.DependencyInjection.Options;
 using IdentityServer4.Extensions;
 using IdentityServer4.Models;
-using LanguageExt;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using static LanguageExt.Prelude;
 
 // ReSharper disable once CheckNamespace
 namespace IdentityServer4.Validation;
@@ -54,7 +50,7 @@ public class JwtBearerClientAssertionSecretParser : ISecretParser
     /// <returns>
     /// A parsed secret
     /// </returns>
-    public async Task<Option<ParsedSecret>> ParseAsync(HttpContext context)
+    public async Task<Option<Credentials>> GetCredentials(HttpContext context)
     {
         logger.LogDebug("Start parsing for JWT client assertion in post body");
 
@@ -85,13 +81,7 @@ public class JwtBearerClientAssertionSecretParser : ISecretParser
                 return None;
             }
 
-            var parsedSecret = new ParsedSecret{
-                Id         = clientId,
-                Credential = clientAssertion,
-                Type       = IdentityServerConstants.ParsedSecretTypes.JwtBearer
-            };
-
-            return parsedSecret;
+            return new Credentials.JwtBearer(clientId, clientAssertion);
         }
 
         logger.LogDebug("No JWT client assertion found in post body");

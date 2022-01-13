@@ -10,6 +10,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using IdentityServer4.Models.Messages;
 
 namespace IdentityServer4.Models
 {

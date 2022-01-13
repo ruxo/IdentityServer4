@@ -67,7 +67,8 @@ public class IdentityServerMiddleware
             {
                 logger.LogInformation("Invoking IdentityServer endpoint: {EndpointType} for {Url}", endpoint.Get().GetType().FullName, context.Request.Path.ToString());
 
-                await endpoint.Get().HandleRequest(context);
+                var result = await endpoint.Get().HandleRequest(context);
+                // TODO: handle error
                 return;
             }
         }

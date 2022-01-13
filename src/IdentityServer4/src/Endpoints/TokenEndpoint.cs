@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System.Collections.Immutable;
 using IdentityModel;
 using IdentityServer4.Endpoints.Results;
 using IdentityServer4.Events;
@@ -10,6 +11,7 @@ using IdentityServer4.Hosting;
 using IdentityServer4.ResponseHandling;
 using IdentityServer4.Services;
 using IdentityServer4.Validation;
+using IdentityServer4.Validation.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -21,11 +23,11 @@ namespace IdentityServer4.Endpoints;
 /// <seealso cref="IdentityServer4.Hosting.IEndpointHandler" />
 class TokenEndpoint : IEndpointHandler
 {
-    readonly IClientSecretValidator _clientValidator;
-    readonly ITokenRequestValidator _requestValidator;
-    readonly ITokenResponseGenerator _responseGenerator;
-    readonly IEventService _events;
-    readonly ILogger _logger;
+    readonly IClientSecretValidator clientValidator;
+    readonly ITokenRequestValidator requestValidator;
+    readonly ITokenResponseGenerator responseGenerator;
+    readonly IEventService events;
+    readonly ILogger logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TokenEndpoint" /> class.
@@ -42,11 +44,11 @@ class TokenEndpoint : IEndpointHandler
         IEventService           events,
         ILogger<TokenEndpoint>  logger)
     {
-        _clientValidator   = clientValidator;
-        _requestValidator  = requestValidator;
-        _responseGenerator = responseGenerator;
-        _events            = events;
-        _logger            = logger;
+        this.clientValidator   = clientValidator;
+        this.requestValidator  = requestValidator;
+        this.responseGenerator = responseGenerator;
+        this.events            = events;
+        this.logger            = logger;
     }
 
     /// <summary>
@@ -54,51 +56,48 @@ class TokenEndpoint : IEndpointHandler
     /// </summary>
     /// <param name="context">The HTTP context.</param>
     /// <returns></returns>
-    public async Task HandleRequest(HttpContext context)
+    public async Task<Either<ErrorInfo, Unit>> HandleRequest(HttpContext context)
     {
-        _logger.LogTrace("Processing token request");
+        logger.LogTrace("Processing token request");
 
         // validate HTTP
-        if (!HttpMethods.IsPost(context.Request.Method) || !context.Request.HasApplicationFormContentType())
-        {
-            _logger.LogWarning("Invalid HTTP request for token endpoint");
-            return Error(OidcConstants.TokenErrors.InvalidRequest);
-        }
-
-        return await ProcessTokenRequestAsync(context);
+        if (HttpMethods.IsPost(context.Request.Method) && context.Request.HasApplicationFormContentType())
+            return await ProcessTokenRequestAsync(context);
+        logger.LogWarning("Invalid HTTP request for token endpoint");
+        return new ErrorInfo(OidcConstants.TokenErrors.InvalidRequest);
     }
 
-    async Task<IEndpointResult> ProcessTokenRequestAsync(HttpContext context)
+    async ValueTask<Either<ErrorInfo, Unit>> ProcessTokenRequestAsync(HttpContext context)
     {
-        _logger.LogDebug("Start token request");
+        logger.LogDebug("Start token request");
 
         // validate client
-        var clientResult = await _clientValidator.ValidateAsync(context);
+        var verifiedResult = await clientValidator.GetVerifiedClient(context);
 
-        if (clientResult.IsLeft)
-            return Error(OidcConstants.TokenErrors.InvalidClient);
+        if (verifiedResult.IsLeft)
+            return verifiedResult.GetLeft();
 
         // validate request
-        var form = (await context.Request.ReadFormAsync()).ToNameValueDictionary();
-        _logger.LogTrace("Calling into token request validator: {Type}", _requestValidator.GetType().FullName);
-        var result = await _requestValidator.ValidateRequestAsync(form, clientResult.GetRight());
+        var parameters = (await context.Request.ReadFormAsync()).ToImmutableDictionary();
+        logger.LogTrace("Calling into token request validator: {Type}", requestValidator.GetType().FullName);
+        var result = await requestValidator.ValidateRequestAsync(parameters, verifiedResult.GetRight());
 
         if (result.IsLeft) {
             var er = result.GetLeft();
-            await _events.RaiseAsync(TokenIssuedFailureEvent.Create(er));
-            return Error(er.Error, er.ErrorDescription, er.CustomResponse);
+            await events.RaiseAsync(TokenIssuedFailureEvent.Create(er));
+            return new ErrorInfo(er.Error, er.ErrorDescription, er.CustomResponse);
         }
         var requestResult = result.GetRight();
 
         // create response
-        _logger.LogTrace("Calling into token request response generator: {Type}", _responseGenerator.GetType().FullName);
-        var response = await _responseGenerator.ProcessAsync(requestResult);
+        logger.LogTrace("Calling into token request response generator: {Type}", responseGenerator.GetType().FullName);
+        var response = await responseGenerator.ProcessAsync(requestResult);
 
-        await _events.RaiseAsync(TokenIssuedSuccessEvent.Create(response, requestResult));
+        await events.RaiseAsync(TokenIssuedSuccessEvent.Create(response, requestResult));
         LogTokens(response, requestResult);
 
         // return result
-        _logger.LogDebug("Token request success");
+        logger.LogDebug("Token request success");
         return new TokenResult(response);
     }
 
@@ -111,10 +110,10 @@ class TokenEndpoint : IEndpointHandler
         var subjectId = requestResult.ValidatedRequest.Subject.Get().GetSubjectId();
 
         if (response.IdentityToken.IsSome)
-            _logger.LogTrace("Identity token issued for {ClientId} / {SubjectId}: {Token}", clientId, subjectId, response.IdentityToken.Get());
+            logger.LogTrace("Identity token issued for {ClientId} / {SubjectId}: {Token}", clientId, subjectId, response.IdentityToken.Get());
         if (response.RefreshToken.IsSome)
-            _logger.LogTrace("Refresh token issued for {ClientId} / {SubjectId}: {Token}", clientId, subjectId, response.RefreshToken.Get());
+            logger.LogTrace("Refresh token issued for {ClientId} / {SubjectId}: {Token}", clientId, subjectId, response.RefreshToken.Get());
 
-        _logger.LogTrace("Access token issued for {ClientId} / {SubjectId}: {Token}", clientId, subjectId, response.AccessToken);
+        logger.LogTrace("Access token issued for {ClientId} / {SubjectId}: {Token}", clientId, subjectId, response.AccessToken);
     }
 }

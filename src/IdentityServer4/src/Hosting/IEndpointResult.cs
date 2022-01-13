@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 
+using System;
 using Microsoft.AspNetCore.Http;
 
 namespace IdentityServer4.Hosting;
@@ -9,6 +10,7 @@ namespace IdentityServer4.Hosting;
 /// <summary>
 /// Endpoint result
 /// </summary>
+[Obsolete("Replaced with ApiRenderer")]
 public interface IEndpointResult
 {
     /// <summary>

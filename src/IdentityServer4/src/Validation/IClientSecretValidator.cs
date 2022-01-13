@@ -17,5 +17,5 @@ public interface IClientSecretValidator
     /// </summary>
     /// <param name="context">The context.</param>
     /// <returns></returns>
-    Task<Either<ErrorInfo,ClientSecretValidationResult>> ValidateAsync(HttpContext context);
+    Task<Either<ErrorInfo,VerifiedClient>> GetVerifiedClient(HttpContext context);
 }

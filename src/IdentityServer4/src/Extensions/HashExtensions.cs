@@ -19,17 +19,12 @@ namespace IdentityServer4.Models
         /// </summary>
         /// <param name="input">The input.</param>
         /// <returns>A hash</returns>
-        public static string Sha256(this string input)
-        {
-            if (input.IsMissing()) return string.Empty;
+        public static string Sha256(this string input) {
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(input);
+            var hash = sha.ComputeHash(bytes);
 
-            using (var sha = SHA256.Create())
-            {
-                var bytes = Encoding.UTF8.GetBytes(input);
-                var hash = sha.ComputeHash(bytes);
-
-                return Convert.ToBase64String(hash);
-            }
+            return Convert.ToBase64String(hash);
         }
 
         /// <summary>
